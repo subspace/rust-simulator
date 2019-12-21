@@ -18,13 +18,13 @@ impl Plot {
     }
   }
 
-  pub fn add(mut self, encoding: &Vec<u8>, index: usize) {
-    self.file.seek(SeekFrom::Start(index as u64 * 4096));
-    self.file.write(&encoding[0..4096]);
+  pub fn add(&mut self, encoding: &Vec<u8>, index: usize) {
+    self.file.seek(SeekFrom::Start(index as u64 * 4096)).unwrap();
+    self.file.write(&encoding[0..4096]).unwrap();
   }
 
-  pub fn get(mut self, index: usize) -> Vec<u8> {
-    self.file.seek(SeekFrom::Start(index as u64 * 4096));
+  pub fn get(&mut self, index: usize) -> Vec<u8> {
+    self.file.seek(SeekFrom::Start(index as u64 * 4096)).unwrap();
     let mut buffer = [0; 4096];
     self.file.read(&mut buffer).unwrap();
     buffer.to_vec()

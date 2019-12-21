@@ -55,11 +55,3 @@ pub fn decode(encoding: &[u8], index: u32, key: &[u8], rounds: u32) -> Vec<u8> {
 
   piece
 }
-
-// pub fn gen_merkle_tree() {
-
-// }
-
-// pub fn verify_merkle_proof() {
-
-// }

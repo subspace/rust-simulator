@@ -1,5 +1,7 @@
 mod crypto;
 mod plotter;
+mod spv;
+mod utils;
 
 use rand::Rng;
 
@@ -26,7 +28,7 @@ fn main() {
 
   // open the plotter
 
-  let plot = plotter::Plot::new("plot.bin".to_string(), PLOT_SIZE);
+  let mut plot = plotter::Plot::new("plot.bin".to_string(), PLOT_SIZE);
 
   // plot pieces
   for i in 0..PIECE_COUNT {
