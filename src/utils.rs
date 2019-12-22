@@ -1,8 +1,10 @@
 extern crate num_bigint;
 extern crate num_traits;
+extern crate bitintr;
 
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::cast::ToPrimitive;
+use bitintr::Lzcnt;
 
 pub fn bytes_to_bigint(bytes: &[u8]) -> BigUint {
   BigUint::from_bytes_be(bytes)
@@ -12,6 +14,19 @@ pub fn usize_to_bigint(number: usize) -> BigUint {
   ToBigUint::to_biguint(&number).unwrap()
 }
 
-pub fn bigint_to_usize(bigInt: BigUint) -> usize {
-  bigInt.to_usize().unwrap()
+pub fn bigint_to_usize(bigint: BigUint) -> usize {
+  bigint.to_usize().unwrap()
 }
+
+pub fn measure_quality(tag: &[u8]) -> u8 {
+  let mut quality: u8 = 0;
+  for byte in tag.iter() {
+    let zero_bits = byte.lzcnt();
+    quality += zero_bits;
+    if zero_bits < 8 {
+      break
+    }
+  }
+  quality
+}
+

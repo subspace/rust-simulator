@@ -2,12 +2,27 @@ use super::plotter;
 use super::crypto;
 use super::utils;
 
-
-struct Solution {
+struct Solution <'a> {
   index: u64,
-  tag: [u8; 32],
-  quality: u64,
-  encoding: [u8; 4096],
+  tag: &'a [u8],
+  quality: u8,
+  encoding: &'a [u8],
+}
+pub fn solve(challenge: &[u8], piece_count: usize, plot: &mut plotter::Plot) -> Solution {
+  let challenge_as_big_integer = utils::bytes_to_bigint(&challenge);
+  let piece_count_as_big_integer = utils::usize_to_bigint(piece_count);
+  let index_as_big_integer = challenge_as_big_integer % piece_count_as_big_integer;
+  let index = utils::bigint_to_usize(index_as_big_integer);
+  let encoding = plot.get(index);
+  let tag = crypto::create_hmac(&encoding[0..4096], &challenge);
+  let quality = utils::measure_quality(&tag);
+
+  Solution {
+    index: index as u64,
+    tag: &tag[0..32],
+    quality,
+    encoding: &encoding[0..4096],
+  }
 }
 
 struct Proof {
@@ -17,15 +32,6 @@ struct Proof {
   signature: [u8; 64],
   merkle_proof: [u8; 256],
   encoding: [u8; 4096]
-}
-
-pub fn solve(challenge: &[u8], pieceCount: usize, plot: &plotter::Plot) {
-  let challengeAsBigInteger = utils::bytes_to_bigint(&challenge);
-  let pieceCountAsBigInteger = utils::usize_to_bigint(pieceCount);
-  let indexAsBigInteger = challengeAsBigInteger % pieceCountAsBigInteger;
-  let index = utils::bigint_to_usize(indexAsBigInteger);
-  let encoding = plot.get(index);
-  // let tag = crypto::create_hmac(encoding[0..4096], &challenge);
 }
 
 pub fn prove() {

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod crypto;
 mod plotter;
 mod spv;
