@@ -1,54 +1,83 @@
+extern crate ed25519_dalek;
+
 use super::plotter;
 use super::crypto;
 use super::utils;
 
-struct Solution <'a> {
-  index: u64,
-  tag: &'a [u8],
-  quality: u8,
-  encoding: &'a [u8],
+use ed25519_dalek::{Keypair, PublicKey, Signature};
+
+pub struct Solution {
+  pub index: u64,
+  pub tag: Vec<u8>,
+  pub quality: u8,
+  pub encoding: Vec<u8>
 }
+
 pub fn solve(challenge: &[u8], piece_count: usize, plot: &mut plotter::Plot) -> Solution {
-  let challenge_as_big_integer = utils::bytes_to_bigint(&challenge);
-  let piece_count_as_big_integer = utils::usize_to_bigint(piece_count);
-  let index_as_big_integer = challenge_as_big_integer % piece_count_as_big_integer;
-  let index = utils::bigint_to_usize(index_as_big_integer);
+  let index = utils::modulo(&challenge, piece_count);
   let encoding = plot.get(index);
   let tag = crypto::create_hmac(&encoding[0..4096], &challenge);
   let quality = utils::measure_quality(&tag);
 
   Solution {
     index: index as u64,
-    tag: &tag[0..32],
+    tag,
     quality,
-    encoding: &encoding[0..4096],
+    encoding
   }
 }
 
-struct Proof {
-  challenge: [u8; 32],
-  public_key: [u8; 32],
-  tag: [u8; 32],
-  signature: [u8; 64],
-  merkle_proof: [u8; 256],
-  encoding: [u8; 4096]
+pub struct Proof {
+  pub challenge: Vec<u8>,
+  pub public_key: [u8; 32],
+  pub tag: Vec<u8>,
+  pub signature: [u8; 64],
+  // merkle_proof: [u8; 256],
+  pub encoding: Vec<u8>
 }
 
-pub fn prove() {
+pub fn prove(challenge: &[u8], solution: &Solution, keys: &Keypair) -> Proof {
+  let signature = keys.sign(&challenge).to_bytes();
+
+  Proof {
+    challenge: challenge.to_vec(),
+    public_key: keys.public.to_bytes(),
+    tag: solution.tag.clone(),
+    signature,
+    encoding: solution.encoding.clone()
+  }
 }
 
-pub fn verify() {
-}
+pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &Vec<u8>) -> bool {
 
-// export async function solve(challenge: Uint8Array, pieceCount: number, plot: Plotter): Promise<ISolution> {
-//   const index = modulo(challenge, pieceCount);
-//   const encoding = await plot.get(index);
-//   const tag = crypto.hmac(encoding, challenge);
-//   const quality = measureQuality(tag);
-//   return {
-//     index,
-//     encoding,
-//     tag,
-//     quality,
-//   };
-// }
+  // derive the challenge index
+  let index = utils::modulo(&proof.challenge, piece_count);
+
+  // is tag correct
+  let tag = crypto::create_hmac(&proof.encoding[0..4096], &proof.challenge);
+  if !utils::are_arrays_equal(&tag, &proof.tag) {
+    println!("Invalid proof, tag is invalid");
+    false;
+  }
+
+  // verify decoding matches genesis piece
+  let id = crypto::digest_sha_256(&proof.public_key);
+  let decoding = crypto::decode(&proof.encoding[0..4096], index as u32, &id[0..32]);
+  let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
+  if !utils::are_arrays_equal(&genesis_piece_hash[0..32], &decoding_hash[0..32]) {
+    println!("Invalid proof, encoding is invalid");
+    false;
+  }
+
+  // verify signature
+  let public_key = PublicKey::from_bytes(&proof.public_key).unwrap();
+  let signature = Signature::from_bytes(&proof.signature).unwrap();
+  if !public_key.verify(&proof.tag, &signature).is_ok() {
+    println!("Invalid proof, signature is invalid");
+    false;
+  }
+
+  // verify merkle proof ...
+  
+  true
+}
