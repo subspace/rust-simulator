@@ -65,5 +65,5 @@ pub fn decode(encoding: &[u8], index: u32, id: &[u8]) -> Vec<u8> {
     piece = cipher.decrypt(&mut piece).unwrap().to_vec();
   }
 
-  piece
+  piece.to_vec()
 }

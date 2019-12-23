@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{OpenOptions, File};
 use std::io::prelude::*;
 use std::io::SeekFrom;
 
@@ -10,7 +10,13 @@ pub struct Plot {
 
 impl Plot {
   pub fn new(path: String, size: usize) -> Plot {
-    let file = File::create(&path).expect("Unable to open");
+    let file = OpenOptions::new()
+      .read(true)
+      .write(true)
+      .create(true)
+      .open(&path)
+      .expect("Unable to open");
+
     Plot {
       path: String::from(&path),
       size,
