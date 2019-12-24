@@ -17,9 +17,7 @@ use byteorder::WriteBytesExt;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 
-
 const ROUNDS: usize = 1;
-
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 
