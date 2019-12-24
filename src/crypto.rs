@@ -71,7 +71,7 @@ pub fn decode(encoding: &[u8], index: u32, id: &[u8]) -> Vec<u8> {
   piece.to_vec()
 }
 
-pub fn encode_single_piece(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
+pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
 
   // setup the cipher
   let iv = utils::usize_to_bytes(index);
@@ -107,7 +107,7 @@ pub fn encode_single_piece(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
   encoding
 }
 
-pub fn decode_single_piece(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> {
+pub fn decode_single_block(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> {
   // setup the cipher
   let iv = utils::usize_to_bytes(index);
   let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
@@ -143,3 +143,56 @@ pub fn decode_single_piece(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
 
   piece
 }
+
+pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> {
+  // setup the cipher
+  const BATCH_SIZE: usize = 8;
+  let iv = utils::usize_to_bytes(index);
+  let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
+  let block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
+  let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
+  let mut piece: Vec<u8> = Vec::new();
+  let cipher = Aes256::new(&key);
+
+ for batch in 0..(crate::BLOCKS_PER_PIECE / BATCH_SIZE) { // 32 by default
+
+  // load blocks
+  for block in 0..BATCH_SIZE { // 8 by default
+    block8[block] = GenericArray::clone_from_slice(&encoding[(block * crate::BLOCK_SIZE)..((block + 1) * crate::BLOCK_SIZE)]);
+  }
+
+  // decrypt blocks
+  for _ in 0..crate::ROUNDS { // 24 rounds by default
+    cipher.decrypt_blocks(&mut block8);
+  }
+
+  // xor blocks
+  for block in 0..BATCH_SIZE { // 8 by default
+    if batch == 0 {
+      for byte in 0..crate::BLOCK_SIZE { // 16 by default
+        if block == 0 {
+          block8[block][byte] = block8[block][byte] ^ iv[byte];
+        } else {
+          // block8[block][byte] = block8[block][byte] ^ encoding[(((block * BATCH_SIZE) - 1) * crate::BLOCK_SIZE) + byte];
+          block8[block][byte] = block8[block][byte] ^ encoding[(block - 1) * crate::BLOCK_SIZE + byte];
+        }
+      }
+    } else {
+      for byte in 0..crate::BLOCK_SIZE { // 16 by default
+        // println!("batch: {}, block: {}, byte: {} ", batch, block, byte);
+        block8[block][byte] = block8[block][byte] ^ encoding[(batch - 1) * BATCH_SIZE * crate::BLOCK_SIZE + byte];
+      }
+    }
+  }
+  
+  // append blocks
+  for block in 0..BATCH_SIZE { // 8 by default
+    piece.extend_from_slice(&block8[block][0..crate::BLOCK_SIZE]);
+  }
+ } 
+  piece
+}
+
+// encode many different pieces in parallel on a single core
+
+// encode many different pieces in parallel on multiple cores

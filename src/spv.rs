@@ -63,7 +63,7 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &Vec<u8>) ->
 
   // verify decoding matches genesis piece
   let id = crypto::digest_sha_256(&proof.public_key);
-  let decoding = crypto::decode_single_piece(&proof.encoding[0..4096], &id[0..32], index);
+  let decoding = crypto::decode_single_block(&proof.encoding[0..4096], &id[0..32], index);
   let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
   if !utils::are_arrays_equal(&genesis_piece_hash[0..32], &decoding_hash[0..32]) {
     println!("Invalid proof, encoding is invalid");

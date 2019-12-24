@@ -17,15 +17,12 @@ pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
 pub const PLOT_SIZE: usize = 1048576;
 pub const PIECE_COUNT: usize = PLOT_SIZE / PIECE_SIZE;
-pub const ROUNDS: usize = 24;
+pub const ROUNDS: usize = 64;
 
 fn main() {
-  run_simulator();
+  test_encoding();
 }
 
-// measure raw encoding time
-// measure raw plotting time and time per piece
-// measure average evaluation time
 // measure average propagation time
 
 fn test_encoding() {
@@ -38,7 +35,7 @@ fn test_encoding() {
 
   let encode_time = Instant::now();
   for i in 0..tests {
-    let encoding = crypto::encode_single_piece(&piece, &key[0..32], i);
+    let encoding = crypto::encode_single_block(&piece, &key[0..32], i);
     encodings.push(encoding);
     // println!("Encoding is {:x?}", encoding);
     // println!("Encoding length is {}", encoding.len());
@@ -49,7 +46,7 @@ fn test_encoding() {
   let decode_time = Instant::now();
   for i in 0..tests {
     let encoding = &encodings[i];
-    crypto::decode_single_piece(&encoding[0..4096], &key[0..32], i);
+    crypto::decode_eight_blocks(&encoding[0..4096], &key[0..32], i);
     // println!("Decoding is {:x?}", decoding);
     // println!("Decoding length is {}", decoding.len());
   }
@@ -91,7 +88,7 @@ fn run_simulator() {
   let plot_time = Instant::now();
   // plot pieces
   for i in 0..PIECE_COUNT {
-    let encoding = crypto::encode_single_piece(&genesis_piece, &id, i);
+    let encoding = crypto::encode_single_block(&genesis_piece, &id, i);
     plot.add(&encoding, i);
 
     // let hash = crypto::digest_sha_256(&encoding[0..4096]);
@@ -134,6 +131,7 @@ fn run_simulator() {
 
   println!("Average evaluation time is {} ms per piece", average_evaluate_time);
 
+  // parallel decoding and encoding
   // create a simple block and add to ledger
   // gossip the block over the network
   // deploy with docker
