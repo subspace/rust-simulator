@@ -5,18 +5,11 @@ extern crate bitintr;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::cast::ToPrimitive;
 use bitintr::Lzcnt;
+use byteorder::BigEndian;
+use byteorder::WriteBytesExt;
 
 pub fn are_arrays_equal(a: &[u8], b: &[u8]) -> bool {
-  if a.len() != b.len() {
-    false;
-  } else {
-    for i in 0..a.len() {
-      if a[i] != b[i] {
-        false;
-      } 
-    }
-  }
-  true
+  a.cmp(b) == std::cmp::Ordering::Equal
 }
 
 pub fn measure_quality(tag: &[u8]) -> u8 {
@@ -29,6 +22,12 @@ pub fn measure_quality(tag: &[u8]) -> u8 {
     }
   }
   quality
+}
+
+pub fn xor_bytes(a: &mut [u8], b: &[u8]) {
+  for i in 0..a.len() {
+    a[i] ^=  b[i];
+  }
 }
 
 pub fn modulo(a: &[u8], n: usize) -> usize {
@@ -48,4 +47,10 @@ pub fn usize_to_bigint(number: usize) -> BigUint {
 
 pub fn bigint_to_usize(bigint: BigUint) -> usize {
   bigint.to_usize().unwrap()
+}
+
+pub fn usize_to_bytes(number: usize) -> [u8; 16] {
+  let mut iv = [0u8; 16];
+  iv.as_mut().write_u32::<BigEndian>(number as u32).unwrap();
+  iv
 }

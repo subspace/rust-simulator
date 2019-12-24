@@ -37,13 +37,14 @@ pub struct Proof {
 }
 
 pub fn prove(challenge: &[u8], solution: &Solution, keys: &Keypair) -> Proof {
-  let signature = keys.sign(&challenge).to_bytes();
+  let signature = keys.sign(&solution.tag).to_bytes();
 
   Proof {
     challenge: challenge.to_vec(),
     public_key: keys.public.to_bytes(),
     tag: solution.tag.clone(),
     signature,
+    // merkle_proof: [u8; 256],
     encoding: solution.encoding.clone()
   }
 }
@@ -57,16 +58,16 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &Vec<u8>) ->
   let tag = crypto::create_hmac(&proof.encoding[0..4096], &proof.challenge);
   if !utils::are_arrays_equal(&tag, &proof.tag) {
     println!("Invalid proof, tag is invalid");
-    false;
+    return false;
   }
 
   // verify decoding matches genesis piece
   let id = crypto::digest_sha_256(&proof.public_key);
-  let decoding = crypto::decode(&proof.encoding[0..4096], index as u32, &id[0..32]);
+  let decoding = crypto::decode_single_piece(&proof.encoding[0..4096], &id[0..32], index);
   let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
   if !utils::are_arrays_equal(&genesis_piece_hash[0..32], &decoding_hash[0..32]) {
     println!("Invalid proof, encoding is invalid");
-    false;
+    return false;
   }
 
   // verify signature
@@ -74,7 +75,7 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &Vec<u8>) ->
   let signature = Signature::from_bytes(&proof.signature).unwrap();
   if !public_key.verify(&proof.tag, &signature).is_ok() {
     println!("Invalid proof, signature is invalid");
-    false;
+    return false;
   }
 
   // verify merkle proof ...

@@ -3,6 +3,8 @@ extern crate sha2;
 extern crate ed25519_dalek;
 extern crate ring;
 
+use super::utils;
+
 use rand::Rng;
 use rand::rngs::OsRng;
 use ed25519_dalek::Keypair;
@@ -12,6 +14,9 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
+
+use aes::block_cipher_trait::generic_array::GenericArray;
+use aes::block_cipher_trait::BlockCipher;
 
 const ROUNDS: usize = 1;
 
@@ -66,4 +71,81 @@ pub fn decode(encoding: &[u8], index: u32, id: &[u8]) -> Vec<u8> {
   }
 
   piece.to_vec()
+}
+
+// iterate the block cipher 
+// encode 8 pieces at a time
+// decode 8 pieces at a time 
+
+pub fn encode_single_piece(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
+
+  // setup the cipher
+  let iv = utils::usize_to_bytes(index);
+  let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
+  let mut block = GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
+  let mut encoding: Vec<u8> = Vec::new();
+  let cipher = Aes256::new(&key);
+
+  // encrypt the first block with iv
+  for i in 0..crate::BLOCK_SIZE {
+    block[i] = block[i] ^ iv[i];
+  }
+
+  for _ in 0..crate::ROUNDS {
+    cipher.encrypt_block(&mut block);
+  }
+
+  encoding.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
+
+  // encrypt subsequent blocks with feedback
+  for b in 1..crate::BLOCKS_PER_PIECE {
+
+    for i in 0..crate::BLOCK_SIZE {
+      block[i] = block[i] ^ piece[i + (b * crate::BLOCK_SIZE)];
+    }
+
+    for _ in 0..crate::ROUNDS {
+      cipher.encrypt_block(&mut block);
+    }
+    encoding.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
+  }  
+
+  encoding
+}
+
+pub fn decode_single_piece(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> {
+  // setup the cipher
+  let iv = utils::usize_to_bytes(index);
+  let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
+  let mut block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
+  let mut piece: Vec<u8> = Vec::new();
+  let cipher = Aes256::new(&key);
+
+  // decrypt the first block with iv
+  for _ in 0..crate::ROUNDS {
+    cipher.decrypt_block(&mut block);
+  }
+
+  for i in 0..crate::BLOCK_SIZE {
+    block[i] = block[i] ^ iv[i];
+  }
+
+  piece.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
+
+  // decrypt subsequent blocks with feedback
+  for b in 1..crate::BLOCKS_PER_PIECE {
+
+    block = GenericArray::clone_from_slice(&encoding[(b * crate::BLOCK_SIZE)..((b + 1) * crate::BLOCK_SIZE)]);
+    for _ in 0..crate::ROUNDS {
+      cipher.decrypt_block(&mut block);
+    }
+
+    for i in 0..crate::BLOCK_SIZE {
+      block[i] = block[i] ^ encoding[((b - 1) * crate::BLOCK_SIZE) + i];
+    }
+
+    piece.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
+  }  
+
+  piece
 }
