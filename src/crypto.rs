@@ -14,9 +14,9 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
-
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
+
 
 const ROUNDS: usize = 1;
 
@@ -72,10 +72,6 @@ pub fn decode(encoding: &[u8], index: u32, id: &[u8]) -> Vec<u8> {
 
   piece.to_vec()
 }
-
-// iterate the block cipher 
-// encode 8 pieces at a time
-// decode 8 pieces at a time 
 
 pub fn encode_single_piece(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
 

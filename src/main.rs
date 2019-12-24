@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+extern crate merkle;
 
 mod crypto;
 mod plotter;
@@ -6,6 +7,8 @@ mod spv;
 mod utils;
 
 use std::path::Path;
+use merkle::MerkleTree;
+use ring::digest::{Algorithm, SHA512};
 
 pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
@@ -44,6 +47,17 @@ fn run() {
   let id = crypto::digest_sha_256(&binary_public_key);
   println!("Generated id: {:x?}", id);
 
+  // build merkle tree
+  #[allow(non_upper_case_globals)]
+  static digest: &'static Algorithm = &SHA512;
+  let merkle_values = (0..255).map(|x| vec![x]).collect::<Vec<_>>();
+  let merkle_tree = MerkleTree::from_vec(digest, merkle_values.clone());
+  let merkle_proofs = merkle_values
+              .into_iter()
+              .map(|v| merkle_tree.gen_proof(v).unwrap())
+              .collect::<Vec<_>>();
+  let merkle_root = merkle_tree.root_hash();
+
   // open the plotter
   let path = Path::new(".")
     .join("results")
@@ -67,17 +81,24 @@ fn run() {
   println!("Plotted all pieces", );
 
   // start evaluation loop
-  let evaluations: usize = 1;
+  let evaluations: usize = 100;
   let mut challenge = crypto::random_bytes(32);
-  println!("challenge: {:x?}", challenge);
+  // println!("challenge: {:x?}", challenge);
+  let quality_threshold = 0;
   for _ in 0..evaluations {
     let solution = spv::solve(&challenge[0..32], PIECE_COUNT, &mut plot);
-    // get the right merkle proof
-    // measure the quality if above threshold
-    let proof = spv::prove(&challenge[0..32], &solution, &keys);
-    spv::verify(proof, PIECE_COUNT, &genesis_piece_hash);
-    challenge = crypto::digest_sha_256(&solution.tag[0..32]);
-  }
+    if solution.quality >= quality_threshold {
+      let proof = spv::prove(&challenge[0..32], &solution, &keys);
+      spv::verify(proof, PIECE_COUNT, &genesis_piece_hash);
+      let merkle_index = solution.index % 256;
+      let merkle_proof = merkle_proofs[merkle_index as usize].clone();
+      if !merkle_proof.validate(merkle_root) {
+        println!("Invalid proof, merkle proof is invalid");
+      }
+      challenge = crypto::digest_sha_256(&solution.tag[0..32]);
+    }
+  } 
+    
   
 
   // time analysis
