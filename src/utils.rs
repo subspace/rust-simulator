@@ -1,6 +1,7 @@
 extern crate num_bigint;
 extern crate num_traits;
 extern crate bitintr;
+extern crate hex;
 
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::cast::ToPrimitive;
@@ -53,4 +54,23 @@ pub fn usize_to_bytes(number: usize) -> [u8; 16] {
   let mut iv = [0u8; 16];
   iv.as_mut().write_u32::<BigEndian>(number as u32).unwrap();
   iv
+}
+
+pub fn print_bytes(bytes: Vec<u8>) {
+  let vec_slices: Vec<&[u8]> = bytes.chunks(16).collect();
+  for (i, slice) in vec_slices.iter().enumerate() {
+    println!("Block {}:\t {}", i, hex::encode(slice.to_vec()));
+  }
+}
+
+pub fn compare_bytes(a: Vec<u8>, b: Vec<u8>, c: Vec<u8>) {
+  let a_slices: Vec<&[u8]> = a.chunks(16).collect();
+  let b_slices: Vec<&[u8]> = b.chunks(16).collect();
+  let c_slices: Vec<&[u8]> = c.chunks(16).collect();
+  for (i, slice) in a_slices.iter().enumerate() {
+    println!("Block {}:\t {} \t{} \t{}", i, hex::encode(slice.to_vec()), hex::encode(b_slices[i].to_vec()), hex::encode(c_slices[i].to_vec()));
+    if i % 8 == 7 {
+      println!();
+    } 
+  }
 }

@@ -17,41 +17,77 @@ pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
 pub const PLOT_SIZE: usize = 1048576;
 pub const PIECE_COUNT: usize = PLOT_SIZE / PIECE_SIZE;
-pub const ROUNDS: usize = 64;
+pub const ROUNDS: usize = 24;
 
 fn main() {
-  test_encoding();
+  validate_encoding();
+  test_encoding_speed();
 }
 
 // measure average propagation time
 
-fn test_encoding() {
+fn validate_encoding() {
+  let piece = crypto::random_bytes(4096);
+  let key = crypto::random_bytes(32);
+  let piece_hash = crypto::digest_sha_256(&piece[0..4096]);
+  let index: usize = 2342345234;
+  let simple_encoding = crypto::encode_single_block(&piece[0..4096], &key[0..32], index);
+  // let simple_encoding_hash = crypto::digest_sha_256(&simple_encoding[0..4096]);
+  let simple_decoding = crypto::decode_single_block(&simple_encoding[0..4096], &key[0..32], index);
+  let simple_decoding_hash = crypto::digest_sha_256(&simple_decoding[0..4096]);
+  let parallel_decoding = crypto::decode_eight_blocks(&simple_encoding[0..4096], &key[0..32], index);
+  let parallel_decoding_hash = crypto::digest_sha_256(&parallel_decoding[0..4096]);
+
+  // does simple decoding match piece?
+  if utils::are_arrays_equal(&piece_hash[0..32], &simple_decoding_hash[0..32]) {
+    println!("Success! -- Simple decoding matches piece");
+  } else {
+    println!("Failure! -- Simple decoding does not match piece\n");
+    utils::compare_bytes(piece.clone(), simple_encoding.clone(), simple_decoding);
+  }
+
+  // does parallel decoding match piece
+  if utils::are_arrays_equal(&piece_hash[0..32], &parallel_decoding_hash[0..32]) {
+    println!("Success! -- Parallel decoding matches piece");
+  } else {
+    println!("Failure! -- Parallel decoding does not match piece\n");
+    utils::compare_bytes(piece.clone(), simple_encoding.clone(), parallel_decoding);
+  }
+
+}
+
+fn test_encoding_speed() {
   let tests = 1000; 
   let piece = crypto::random_bytes(4096);
   let key = crypto::random_bytes(32);
-  // println!("Piece is {:x?}", piece);
-  // println!("Piece length is {}", piece.len());
   let mut encodings: Vec<Vec<u8>> = Vec::new();
 
+  // measure simple encode time
   let encode_time = Instant::now();
   for i in 0..tests {
     let encoding = crypto::encode_single_block(&piece, &key[0..32], i);
     encodings.push(encoding);
-    // println!("Encoding is {:x?}", encoding);
-    // println!("Encoding length is {}", encoding.len());
   }
   let average_encode_time = (encode_time.elapsed().as_nanos() / tests as u128) / (1000 * 1000);
-  println!("Average encode time is {} ms", average_encode_time); 
+  println!("Average simple encode time is {} ms", average_encode_time); 
 
-  let decode_time = Instant::now();
+  // measure simple decode time
+  let simple_decode_time = Instant::now();
+  for i in 0..tests {
+    let encoding = &encodings[i];
+    crypto::decode_single_block(&encoding[0..4096], &key[0..32], i);
+  }
+  let average_simple_decode_time = (simple_decode_time.elapsed().as_nanos() / tests as u128) / (1000 * 1000);
+  println!("Average simple decode time is {} ms", average_simple_decode_time);
+
+  // measure parallel decode time
+  let parallel_decode_time = Instant::now();
   for i in 0..tests {
     let encoding = &encodings[i];
     crypto::decode_eight_blocks(&encoding[0..4096], &key[0..32], i);
-    // println!("Decoding is {:x?}", decoding);
-    // println!("Decoding length is {}", decoding.len());
   }
-  let average_decode_time = (decode_time.elapsed().as_nanos() / tests as u128) / (1000 * 1000);
-  println!("Average decode time is {} ms", average_decode_time);
+  let average_parallel_decode_time = (parallel_decode_time.elapsed().as_nanos() / tests as u128) / (1000 * 1000);
+  println!("Average parallel decode time is {} ms", average_parallel_decode_time);
 }
 
 fn run_simulator() {

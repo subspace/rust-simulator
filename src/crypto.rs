@@ -80,67 +80,57 @@ pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
   let mut encoding: Vec<u8> = Vec::new();
   let cipher = Aes256::new(&key);
 
-  // encrypt the first block with iv
-  for i in 0..crate::BLOCK_SIZE {
-    block[i] = block[i] ^ iv[i];
-  }
+  for b in 0..crate::BLOCKS_PER_PIECE {
 
-  for _ in 0..crate::ROUNDS {
-    cipher.encrypt_block(&mut block);
-  }
-
-  encoding.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
-
-  // encrypt subsequent blocks with feedback
-  for b in 1..crate::BLOCKS_PER_PIECE {
-
+    // xor iv or feedback with source block
     for i in 0..crate::BLOCK_SIZE {
-      block[i] = block[i] ^ piece[i + (b * crate::BLOCK_SIZE)];
+      if b == 0 { 
+        block[i] = block[i] ^ iv[i];
+      } else { 
+        block[i] = block[i] ^ piece[i + (b * crate::BLOCK_SIZE)];
+      }
     }
 
+    // apply Rijndael cipher for specified rounds
     for _ in 0..crate::ROUNDS {
       cipher.encrypt_block(&mut block);
     }
-    encoding.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
-  }  
 
+    // append encoded block to encoding
+    encoding.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
+  }
   encoding
 }
 
 pub fn decode_single_block(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> {
+  
   // setup the cipher
   let iv = utils::usize_to_bytes(index);
   let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
-  let mut block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
   let mut piece: Vec<u8> = Vec::new();
   let cipher = Aes256::new(&key);
 
-  // decrypt the first block with iv
-  for _ in 0..crate::ROUNDS {
-    cipher.decrypt_block(&mut block);
-  }
+  for b in 0..crate::BLOCKS_PER_PIECE {
+    let mut block = GenericArray::clone_from_slice(&encoding[(b * crate::BLOCK_SIZE)..((b + 1) * crate::BLOCK_SIZE)]);
 
-  for i in 0..crate::BLOCK_SIZE {
-    block[i] = block[i] ^ iv[i];
-  }
-
-  piece.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
-
-  // decrypt subsequent blocks with feedback
-  for b in 1..crate::BLOCKS_PER_PIECE {
-
-    block = GenericArray::clone_from_slice(&encoding[(b * crate::BLOCK_SIZE)..((b + 1) * crate::BLOCK_SIZE)]);
+    // apply inverse Rijndael cipher to each encoded block
     for _ in 0..crate::ROUNDS {
       cipher.decrypt_block(&mut block);
     }
 
+    // xor with iv or previous encoded block to retrieve source block
     for i in 0..crate::BLOCK_SIZE {
-      block[i] = block[i] ^ encoding[((b - 1) * crate::BLOCK_SIZE) + i];
+      if b == 0 {
+        block[i] = block[i] ^ iv[i];
+      } else {
+        block[i] = block[i] ^ encoding[((b - 1) * crate::BLOCK_SIZE) + i];
+      }
     }
 
+    // append decoded block to piece
     piece.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
-  }  
-
+    
+  }
   piece
 }
 
@@ -153,12 +143,17 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
   let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
   let mut piece: Vec<u8> = Vec::new();
   let cipher = Aes256::new(&key);
+  let mut block_offset = 0;
 
  for batch in 0..(crate::BLOCKS_PER_PIECE / BATCH_SIZE) { // 32 by default
 
   // load blocks
+  let batch_start = batch * BATCH_SIZE * crate::BLOCK_SIZE;
   for block in 0..BATCH_SIZE { // 8 by default
-    block8[block] = GenericArray::clone_from_slice(&encoding[(block * crate::BLOCK_SIZE)..((block + 1) * crate::BLOCK_SIZE)]);
+    block8[block] = GenericArray::clone_from_slice(&encoding[
+      (batch_start + (block * crate::BLOCK_SIZE))..
+      (batch_start + ((block + 1) * crate::BLOCK_SIZE))
+    ]);
   }
 
   // decrypt blocks
@@ -166,25 +161,29 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
     cipher.decrypt_blocks(&mut block8);
   }
 
-  // xor blocks
-  for block in 0..BATCH_SIZE { // 8 by default
-    if batch == 0 {
-      for byte in 0..crate::BLOCK_SIZE { // 16 by default
-        if block == 0 {
+  // xor blocks efficiently 
+  if batch == 0 {
+    for block in 0..BATCH_SIZE {
+      if block == 0 {
+        for byte in 0..crate::BLOCK_SIZE {
           block8[block][byte] = block8[block][byte] ^ iv[byte];
-        } else {
-          // block8[block][byte] = block8[block][byte] ^ encoding[(((block * BATCH_SIZE) - 1) * crate::BLOCK_SIZE) + byte];
-          block8[block][byte] = block8[block][byte] ^ encoding[(block - 1) * crate::BLOCK_SIZE + byte];
         }
-      }
-    } else {
-      for byte in 0..crate::BLOCK_SIZE { // 16 by default
-        // println!("batch: {}, block: {}, byte: {} ", batch, block, byte);
-        block8[block][byte] = block8[block][byte] ^ encoding[(batch - 1) * BATCH_SIZE * crate::BLOCK_SIZE + byte];
+      } else {
+        for byte in 0..crate::BLOCK_SIZE {
+          block8[block][byte] = block8[block][byte] ^ encoding[block_offset + byte];
+        }
+        block_offset += crate::BLOCK_SIZE;
       }
     }
+  } else {
+    for block in 0..BATCH_SIZE {
+      for byte in 0..crate::BLOCK_SIZE {
+        block8[block][byte] = block8[block][byte] ^ encoding[block_offset + byte];
+      }
+      block_offset += crate::BLOCK_SIZE;
+    }
   }
-  
+
   // append blocks
   for block in 0..BATCH_SIZE { // 8 by default
     piece.extend_from_slice(&block8[block][0..crate::BLOCK_SIZE]);
