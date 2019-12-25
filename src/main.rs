@@ -21,7 +21,7 @@ pub const ROUNDS: usize = 24;
 
 fn main() {
   validate_encoding();
-  test_encoding_speed();
+  // test_encoding_speed();
 }
 
 // measure average propagation time
@@ -53,6 +53,26 @@ fn validate_encoding() {
     println!("Failure! -- Parallel decoding does not match piece\n");
     utils::compare_bytes(piece.clone(), simple_encoding.clone(), parallel_decoding);
   }
+
+  let mut pieces: Vec<Vec<u8>> = Vec::new();
+  let mut piece_hashes: Vec<Vec<u8>> = Vec::new();
+  for _ in 0..8 {
+    let piece = crypto::random_bytes(4096);
+    pieces.push(piece.clone());
+    let piece_hash = crypto::digest_sha_256(&piece[0..4096]);
+    piece_hashes.push(piece_hash);
+  }
+  let encodings = crypto::encode_eight_blocks(pieces.clone(), &key[0..32], index);
+  for (i, encoding) in encodings.iter().enumerate() {
+    let decoding = crypto::decode_single_block(encoding, &key[0..32], index + i);
+    let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
+    if ! utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) { 
+      println!("Failure! -- Parallel encoding does not match simple decoding for piece\n");
+      utils::compare_bytes(pieces[i].clone(), encodings[i].clone(), decoding);
+      return
+    }
+  }
+  println!("Success! -- All parallel encodings matches simple decodings for eight pieces");
 
 }
 
