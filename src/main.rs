@@ -75,6 +75,18 @@ fn validate_encoding() {
         }
     }
     println!("Success! -- All parallel encodings matches simple decodings for eight pieces");
+
+    // does parallel decoding match parallel encoding?
+    for (i, encoding) in encodings.iter().enumerate() {
+      let decoding = crypto::decode_eight_blocks(encoding, &key[0..32], index + i);
+      let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
+      if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
+          println!("Failure! -- Parallel encoding does not match parallel decoding for piece\n");
+          utils::compare_bytes(pieces[i].clone(), encodings[i].clone(), decoding);
+          return;
+      }
+  }
+  println!("Success! -- All parallel encodings matches parallel decodings for eight pieces");
 }
 
 fn test_encoding_speed() {
@@ -117,6 +129,8 @@ fn test_encoding_speed() {
         "Average parallel decode time is {} ms",
         average_parallel_decode_time
     );
+
+    // measure parallel encode time
 }
 
 fn run_simulator() {
