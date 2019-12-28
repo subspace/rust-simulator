@@ -151,9 +151,11 @@ pub fn encode_eight_blocks(pieces: Vec<Vec<u8>>, id: &[u8], index: usize) -> Vec
     }
     let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
     let seed_block = GenericArray::clone_from_slice(&pieces[0][0..crate::BLOCK_SIZE]);
+    // try into -- converts slice into fixed size array
     let mut block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
     let cipher = Aes256::new(&key);
     let mut encodings: Vec<Vec<u8>> = Vec::new();
+    // simplify with iterators
     for _ in 0..PIECES_PER_ROUND {
         let encoding: Vec<u8> = Vec::new();
         encodings.push(encoding);

@@ -17,11 +17,11 @@ pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
 pub const PLOT_SIZE: usize = 1048576;
 pub const PIECE_COUNT: usize = PLOT_SIZE / PIECE_SIZE;
-pub const ROUNDS: usize = 24;
+pub const ROUNDS: usize = 48;
 
 fn main() {
-    validate_encoding();
-    // test_encoding_speed();
+    // validate_encoding();
+    test_encoding_speed();
 }
 
 // measure average propagation time
@@ -85,24 +85,47 @@ fn validate_encoding() {
           utils::compare_bytes(pieces[i].clone(), encodings[i].clone(), decoding);
           return;
       }
-  }
-  println!("Success! -- All parallel encodings matches parallel decodings for eight pieces");
+    }
+    println!("Success! -- All parallel encodings matches parallel decodings for eight pieces");
 }
 
 fn test_encoding_speed() {
-    let tests = 1000;
+    let tests = 800;
     let piece = crypto::random_bytes(4096);
     let key = crypto::random_bytes(32);
     let mut encodings: Vec<Vec<u8>> = Vec::new();
 
     // measure simple encode time
-    let encode_time = Instant::now();
+    let encode_start_time = Instant::now();
     for i in 0..tests {
         let encoding = crypto::encode_single_block(&piece, &key[0..32], i);
         encodings.push(encoding);
     }
-    let average_encode_time = (encode_time.elapsed().as_nanos() / tests as u128) / (1000 * 1000);
-    println!("Average simple encode time is {} ms", average_encode_time);
+    let encode_time = encode_start_time.elapsed().as_nanos();
+    println!("Simple encode time is : {} ms", encode_time / (1000 * 1000));
+    let average_encode_time = (encode_time / tests as u128) / (1000);
+    println!("Average simple encode time is {} micro seconds", average_encode_time);
+
+    // measure parallel encode time
+    let parallel_encode_start_time = Instant::now();
+    let mut pieces: Vec<Vec<u8>> = Vec::new();
+    for _ in 0..8 {
+        let piece = crypto::random_bytes(4096);
+        pieces.push(piece);
+    }
+    for i in 0..(tests / 8) {
+      crypto::encode_eight_blocks(pieces.clone(), &key[0..32], i);
+    }
+    let parallel_encode_time = parallel_encode_start_time.elapsed().as_nanos();
+
+    println!("Parallel encode time is {} ms", parallel_encode_time / (1000 * 1000));
+
+    let average_parallel_encode_time =
+        (parallel_encode_time / tests as u128) / (1000);
+    println!(
+        "Average parallel encode time is {} micro seconds",
+        average_parallel_encode_time
+    );
 
     // measure simple decode time
     let simple_decode_time = Instant::now();
@@ -111,9 +134,9 @@ fn test_encoding_speed() {
         crypto::decode_single_block(&encoding[0..4096], &key[0..32], i);
     }
     let average_simple_decode_time =
-        (simple_decode_time.elapsed().as_nanos() / tests as u128) / (1000 * 1000);
+        (simple_decode_time.elapsed().as_nanos() / tests as u128) / (1000);
     println!(
-        "Average simple decode time is {} ms",
+        "Average simple decode time is {} micro seconds",
         average_simple_decode_time
     );
 
@@ -124,13 +147,11 @@ fn test_encoding_speed() {
         crypto::decode_eight_blocks(&encoding[0..4096], &key[0..32], i);
     }
     let average_parallel_decode_time =
-        (parallel_decode_time.elapsed().as_nanos() / tests as u128) / (1000 * 1000);
+        (parallel_decode_time.elapsed().as_nanos() / tests as u128) / (1000);
     println!(
-        "Average parallel decode time is {} ms",
+        "Average parallel decode time is {} micro seconds",
         average_parallel_decode_time
     );
-
-    // measure parallel encode time
 }
 
 fn run_simulator() {
@@ -213,8 +234,9 @@ fn run_simulator() {
         average_evaluate_time
     );
 
-    // parallel decoding and encoding
+    // multi-threaded encoding and encoding
     // create a simple block and add to ledger
+    // std async io instead of tokio for file system
     // gossip the block over the network
     // deploy with docker
 }

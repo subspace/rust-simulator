@@ -50,6 +50,9 @@ pub fn bigint_to_usize(bigint: BigUint) -> usize {
     bigint.to_usize().unwrap()
 }
 
+// built in function
+// u32::from_le_bytes
+// to_le_bytes().as_ref()
 pub fn usize_to_bytes(number: usize) -> [u8; 16] {
     let mut iv = [0u8; 16];
     iv.as_mut().write_u32::<BigEndian>(number as u32).unwrap();
