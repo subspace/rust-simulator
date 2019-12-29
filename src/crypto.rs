@@ -13,7 +13,6 @@ use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
 use ed25519_dalek::Keypair;
-use num_cpus::get_physical;
 use rand::rngs::OsRng;
 use rand::Rng;
 use rayon::prelude::*;
@@ -283,11 +282,10 @@ pub fn encode_eight_blocks_in_parallel(
     pieces: &[Vec<u8>],
     id: &[u8],
 ) -> Vec<Vec<u8>> {
-    let physical_cpu_cores = get_physical();
     pieces
-        .par_chunks(physical_cpu_cores)
+        .par_chunks(8)
         .enumerate()
-        .map(|(chunk, pieces)| encode_eight_blocks(pieces, id, chunk * physical_cpu_cores))
+        .map(|(chunk, pieces)| encode_eight_blocks(pieces, id, chunk * 8))
         .flatten()
         .collect()
 }
