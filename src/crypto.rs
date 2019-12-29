@@ -22,12 +22,9 @@ const ROUNDS: usize = 1;
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 
 pub fn random_bytes(byte_length: usize) -> Vec<u8> {
-    let mut byte_vec: Vec<u8> = Vec::with_capacity(byte_length);
-    let mut rng = rand::thread_rng();
-    for _ in 0..byte_length {
-        byte_vec.push(rng.gen());
-    }
-    byte_vec
+    let mut bytes = vec![0u8; byte_length];
+    rand::thread_rng().fill(&mut bytes[..]);
+    bytes
 }
 
 pub fn gen_keys() -> ed25519_dalek::Keypair {
