@@ -154,14 +154,14 @@ fn test_encoding_speed_run(
     encoder(pieces, key);
     let encode_time = encode_start_time.elapsed();
     println!(
-        "Encode time for {} is {}ms",
+        "Encode time for {} is {:.3}ms",
         test_name,
-        encode_time.as_millis()
+        encode_time.as_micros() as f32 / 1000f32
     );
     println!(
-        "Average encode time for {} is {}us",
+        "Average encode time for {} is {:.3}us",
         test_name,
-        encode_time.as_micros() / pieces.len() as u128
+        (encode_time.as_nanos() / pieces.len() as u128) as f32 / 1000f32
     );
 }
 
