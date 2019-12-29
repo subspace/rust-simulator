@@ -13,8 +13,10 @@ use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
 use ed25519_dalek::Keypair;
+use num_cpus::get_physical;
 use rand::rngs::OsRng;
 use rand::Rng;
+use rayon::prelude::*;
 use ring::{digest, hmac};
 
 const ROUNDS: usize = 1;
@@ -139,7 +141,7 @@ pub fn decode_single_block(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
 }
 
 /// Encodes a single block at a time for eight different pieces on a single core, using instruction-level parallelism
-pub fn encode_eight_blocks(pieces: Vec<Vec<u8>>, id: &[u8], index: usize) -> Vec<Vec<u8>> {
+pub fn encode_eight_blocks(pieces: &[Vec<u8>], id: &[u8], index: usize) -> Vec<Vec<u8>> {
     // setup the cipher
     const PIECES_PER_ROUND: usize = 8;
     let mut ivs: Vec<[u8; 16]> = Vec::new();
@@ -264,8 +266,27 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
 
 /// encodes multiple pieces in parallel, with each piece encoded on a different core, with only one piece being encoded at each core at a time.
 /// Throughput -> O(Number_Of_Cores)
-pub fn encode_single_block_in_parallel() {}
+pub fn encode_single_block_in_parallel(
+    pieces: &Vec<Vec<u8>>,
+    id: &[u8],
+    index: usize,
+) -> Vec<Vec<u8>> {
+    pieces
+        .par_iter()
+        .map(|piece| encode_single_block(piece, id, index))
+        .collect()
+}
 
 /// encodes multiple pieces in parallel, with each piece encoded on a different core, while using instruction level parallelism to encode many different pieces on the same core in parallel.
 /// Throughput -> O(Number_of_cores x 8)
-pub fn encode_eight_blocks_in_parallel() {}
+pub fn encode_eight_blocks_in_parallel(
+    pieces: &Vec<Vec<u8>>,
+    id: &[u8],
+    index: usize,
+) -> Vec<Vec<u8>> {
+    pieces
+        .par_chunks(get_physical())
+        .map(|pieces| encode_eight_blocks(pieces, id, index))
+        .flatten()
+        .collect()
+}

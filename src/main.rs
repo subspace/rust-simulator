@@ -64,7 +64,7 @@ fn validate_encoding() {
         pieces.push(piece);
         piece_hashes.push(piece_hash);
     }
-    let encodings = crypto::encode_eight_blocks(pieces.clone(), &key[0..32], index);
+    let encodings = crypto::encode_eight_blocks(&pieces, &key[0..32], index);
     for (i, encoding) in encodings.iter().enumerate() {
         let decoding = crypto::decode_single_block(encoding, &key[0..32], index + i);
         let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
@@ -117,7 +117,7 @@ fn test_encoding_speed() {
         pieces.push(piece);
     }
     for i in 0..(tests / 8) {
-        crypto::encode_eight_blocks(pieces.clone(), &key[0..32], i);
+        crypto::encode_eight_blocks(&pieces, &key[0..32], i);
     }
     let parallel_encode_time = parallel_encode_start_time.elapsed().as_nanos();
 
