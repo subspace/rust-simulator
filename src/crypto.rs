@@ -265,10 +265,7 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
 
 /// encodes multiple pieces in parallel, with each piece encoded on a different core, with only one piece being encoded at each core at a time.
 /// Throughput -> O(Number_Of_Cores)
-pub fn encode_single_block_in_parallel(
-    pieces: &[Vec<u8>],
-    id: &[u8],
-) -> Vec<Vec<u8>> {
+pub fn encode_single_block_in_parallel(pieces: &[Vec<u8>], id: &[u8]) -> Vec<Vec<u8>> {
     pieces
         .par_iter()
         .enumerate()
@@ -278,10 +275,7 @@ pub fn encode_single_block_in_parallel(
 
 /// encodes multiple pieces in parallel, with each piece encoded on a different core, while using instruction level parallelism to encode many different pieces on the same core in parallel.
 /// Throughput -> O(Number_of_cores x 8)
-pub fn encode_eight_blocks_in_parallel(
-    pieces: &[Vec<u8>],
-    id: &[u8],
-) -> Vec<Vec<u8>> {
+pub fn encode_eight_blocks_in_parallel(pieces: &[Vec<u8>], id: &[u8]) -> Vec<Vec<u8>> {
     pieces
         .par_chunks(8)
         .enumerate()

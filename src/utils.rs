@@ -68,7 +68,7 @@ pub fn print_bytes(bytes: Vec<u8>) {
     }
 }
 
-pub fn compare_bytes(a: Vec<u8>, b: Vec<u8>, c: Vec<u8>) {
+pub fn compare_bytes(a: &[u8], b: &[u8], c: &[u8]) {
     let chunk_size = 16;
     let zipped_iterator = izip!(
         a.chunks(chunk_size),

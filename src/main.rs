@@ -45,7 +45,7 @@ fn validate_encoding() {
         println!("Success! -- Simple decoding matches piece");
     } else {
         println!("Failure! -- Simple decoding does not match piece\n");
-        utils::compare_bytes(piece.clone(), simple_encoding.clone(), simple_decoding);
+        utils::compare_bytes(&piece, &simple_encoding, &simple_decoding);
     }
 
     // does parallel decoding match piece
@@ -53,24 +53,21 @@ fn validate_encoding() {
         println!("Success! -- Parallel decoding matches piece");
     } else {
         println!("Failure! -- Parallel decoding does not match piece\n");
-        utils::compare_bytes(piece, simple_encoding, parallel_decoding);
+        utils::compare_bytes(&piece, &simple_encoding, &parallel_decoding);
     }
 
-    let mut pieces: Vec<Vec<u8>> = Vec::new();
-    let mut piece_hashes: Vec<Vec<u8>> = Vec::new();
-    for _ in 0..8 {
-        let piece = crypto::random_bytes(4096);
-        let piece_hash = crypto::digest_sha_256(&piece[0..4096]);
-        pieces.push(piece);
-        piece_hashes.push(piece_hash);
-    }
+    let pieces: Vec<Vec<u8>> = (0..8).map(|_| crypto::random_bytes(4096)).collect();
+    let piece_hashes: Vec<Vec<u8>> = pieces
+        .iter()
+        .map(|piece| crypto::digest_sha_256(piece))
+        .collect();
     let encodings = crypto::encode_eight_blocks(&pieces, &key[0..32], index);
     for (i, encoding) in encodings.iter().enumerate() {
         let decoding = crypto::decode_single_block(encoding, &key[0..32], index + i);
         let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
         if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
             println!("Failure! -- Parallel encoding does not match simple decoding for piece\n");
-            utils::compare_bytes(pieces[i].clone(), encodings[i].clone(), decoding);
+            utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
             return;
         }
     }
@@ -82,7 +79,7 @@ fn validate_encoding() {
         let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
         if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
             println!("Failure! -- Parallel encoding does not match parallel decoding for piece\n");
-            utils::compare_bytes(pieces[i].clone(), encodings[i].clone(), decoding);
+            utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
             return;
         }
     }
@@ -172,7 +169,7 @@ fn test_encoding_speed_run(
 
 fn test_encoding_speed_single_block(pieces: &[Vec<u8>], key: &[u8]) {
     for (i, piece) in pieces.iter().enumerate() {
-        crypto::encode_single_block(piece, &key, i);
+        crypto::encode_single_block(piece, key, i);
     }
 }
 
