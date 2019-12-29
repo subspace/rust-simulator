@@ -93,13 +93,11 @@ fn test_encoding_speed() {
     let tests = 800;
     let piece = crypto::random_bytes(4096);
     let key = crypto::random_bytes(32);
-    let mut encodings: Vec<Vec<u8>> = Vec::new();
 
     // measure simple encode time
     let encode_start_time = Instant::now();
     for i in 0..tests {
-        let encoding = crypto::encode_single_block(&piece, &key[0..32], i);
-        encodings.push(encoding);
+        crypto::encode_single_block(&piece, &key[0..32], i);
     }
     let encode_time = encode_start_time.elapsed().as_nanos();
     println!("Simple encode time is : {} ms", encode_time / (1000 * 1000));
@@ -110,12 +108,8 @@ fn test_encoding_speed() {
     );
 
     // measure parallel encode time
+    let pieces: Vec<Vec<u8>> = (0..8).map(|_| crypto::random_bytes(4096)).collect();
     let parallel_encode_start_time = Instant::now();
-    let mut pieces: Vec<Vec<u8>> = Vec::new();
-    for _ in 0..8 {
-        let piece = crypto::random_bytes(4096);
-        pieces.push(piece);
-    }
     for i in 0..(tests / 8) {
         crypto::encode_eight_blocks(&pieces, &key[0..32], i);
     }
@@ -131,6 +125,10 @@ fn test_encoding_speed() {
         "Average parallel encode time is {} micro seconds",
         average_parallel_encode_time
     );
+
+    let encodings: Vec<Vec<u8>> = (0..tests)
+        .map(|i| crypto::encode_single_block(&piece, &key[0..32], i))
+        .collect();
 
     // measure simple decode time
     let simple_decode_time = Instant::now();
