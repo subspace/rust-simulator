@@ -78,13 +78,13 @@ fn validate_encoding() {
 
     // does parallel decoding match parallel encoding?
     for (i, encoding) in encodings.iter().enumerate() {
-      let decoding = crypto::decode_eight_blocks(encoding, &key[0..32], index + i);
-      let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
-      if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
-          println!("Failure! -- Parallel encoding does not match parallel decoding for piece\n");
-          utils::compare_bytes(pieces[i].clone(), encodings[i].clone(), decoding);
-          return;
-      }
+        let decoding = crypto::decode_eight_blocks(encoding, &key[0..32], index + i);
+        let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
+        if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
+            println!("Failure! -- Parallel encoding does not match parallel decoding for piece\n");
+            utils::compare_bytes(pieces[i].clone(), encodings[i].clone(), decoding);
+            return;
+        }
     }
     println!("Success! -- All parallel encodings matches parallel decodings for eight pieces");
 }
@@ -104,7 +104,10 @@ fn test_encoding_speed() {
     let encode_time = encode_start_time.elapsed().as_nanos();
     println!("Simple encode time is : {} ms", encode_time / (1000 * 1000));
     let average_encode_time = (encode_time / tests as u128) / (1000);
-    println!("Average simple encode time is {} micro seconds", average_encode_time);
+    println!(
+        "Average simple encode time is {} micro seconds",
+        average_encode_time
+    );
 
     // measure parallel encode time
     let parallel_encode_start_time = Instant::now();
@@ -114,14 +117,16 @@ fn test_encoding_speed() {
         pieces.push(piece);
     }
     for i in 0..(tests / 8) {
-      crypto::encode_eight_blocks(pieces.clone(), &key[0..32], i);
+        crypto::encode_eight_blocks(pieces.clone(), &key[0..32], i);
     }
     let parallel_encode_time = parallel_encode_start_time.elapsed().as_nanos();
 
-    println!("Parallel encode time is {} ms", parallel_encode_time / (1000 * 1000));
+    println!(
+        "Parallel encode time is {} ms",
+        parallel_encode_time / (1000 * 1000)
+    );
 
-    let average_parallel_encode_time =
-        (parallel_encode_time / tests as u128) / (1000);
+    let average_parallel_encode_time = (parallel_encode_time / tests as u128) / (1000);
     println!(
         "Average parallel encode time is {} micro seconds",
         average_parallel_encode_time

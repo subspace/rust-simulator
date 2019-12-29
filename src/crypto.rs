@@ -163,9 +163,8 @@ pub fn encode_eight_blocks(pieces: Vec<Vec<u8>>, id: &[u8], index: usize) -> Vec
         // load the blocks at the same index across all pieces into block8
         let next_block_offset = block_offset + crate::BLOCK_SIZE;
         for piece in 0..PIECES_PER_ROUND {
-            block8[piece] = GenericArray::clone_from_slice(
-                &pieces[piece][block_offset..next_block_offset],
-            );
+            block8[piece] =
+                GenericArray::clone_from_slice(&pieces[piece][block_offset..next_block_offset]);
         }
 
         // xor iv or feedback with source block
@@ -211,20 +210,23 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
     let cipher = Aes256::new(&key);
     let mut block_offset = 0;
 
-    for batch in 0..(crate::BLOCKS_PER_PIECE / BATCH_SIZE) { // 32 by default
+    for batch in 0..(crate::BLOCKS_PER_PIECE / BATCH_SIZE) {
+        // 32 by default
         // load blocks
         let batch_start = batch * BATCH_SIZE * crate::BLOCK_SIZE;
         let mut block_in_batch_offset = 0;
-        for block in 0..BATCH_SIZE {  // 8 by default
+        for block in 0..BATCH_SIZE {
+            // 8 by default
             block8[block] = GenericArray::clone_from_slice(
                 &encoding[batch_start + block_in_batch_offset
-                ..batch_start + block_in_batch_offset + crate::BLOCK_SIZE],
+                    ..batch_start + block_in_batch_offset + crate::BLOCK_SIZE],
             );
             block_in_batch_offset += crate::BLOCK_SIZE;
         }
 
         // decrypt blocks
-        for _ in 0..crate::ROUNDS { // 24 rounds by default
+        for _ in 0..crate::ROUNDS {
+            // 24 rounds by default
             cipher.decrypt_blocks(&mut block8);
         }
 

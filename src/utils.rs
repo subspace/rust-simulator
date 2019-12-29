@@ -3,8 +3,8 @@ extern crate hex;
 extern crate num_bigint;
 extern crate num_traits;
 
-use itertools::izip;
 use bitintr::Lzcnt;
+use itertools::izip;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits::cast::ToPrimitive;
 use std::io::Write;
@@ -56,7 +56,9 @@ pub fn bigint_to_usize(bigint: BigUint) -> usize {
 pub fn usize_to_bytes(number: usize) -> [u8; 16] {
     let mut iv = [0u8; 16];
     // TODO: We probably want to use LE instead for performance reasons
-    iv.as_mut().write_all(&(number as u32).to_be_bytes()).unwrap();
+    iv.as_mut()
+        .write_all(&(number as u32).to_be_bytes())
+        .unwrap();
     iv
 }
 
