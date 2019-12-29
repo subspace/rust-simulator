@@ -15,7 +15,7 @@ pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
 pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
-pub const PLOT_SIZE: usize = 1048576;
+pub const PLOT_SIZE: usize = 1_048_576;
 pub const PIECE_COUNT: usize = PLOT_SIZE / PIECE_SIZE;
 pub const ROUNDS: usize = 48;
 
@@ -30,7 +30,7 @@ fn validate_encoding() {
     let piece = crypto::random_bytes(4096);
     let key = crypto::random_bytes(32);
     let piece_hash = crypto::digest_sha_256(&piece[0..4096]);
-    let index: usize = 2342345234;
+    let index: usize = 2_342_345_234;
     let simple_encoding = crypto::encode_single_block(&piece[0..4096], &key[0..32], index);
     // let simple_encoding_hash = crypto::digest_sha_256(&simple_encoding[0..4096]);
     let simple_decoding =
@@ -53,7 +53,7 @@ fn validate_encoding() {
         println!("Success! -- Parallel decoding matches piece");
     } else {
         println!("Failure! -- Parallel decoding does not match piece\n");
-        utils::compare_bytes(piece.clone(), simple_encoding.clone(), parallel_decoding);
+        utils::compare_bytes(piece, simple_encoding, parallel_decoding);
     }
 
     let mut pieces: Vec<Vec<u8>> = Vec::new();
@@ -129,8 +129,7 @@ fn test_encoding_speed() {
 
     // measure simple decode time
     let simple_decode_time = Instant::now();
-    for i in 0..tests {
-        let encoding = &encodings[i];
+    for (i, encoding) in encodings.iter().enumerate().take(tests) {
         crypto::decode_single_block(&encoding[0..4096], &key[0..32], i);
     }
     let average_simple_decode_time =
@@ -142,8 +141,7 @@ fn test_encoding_speed() {
 
     // measure parallel decode time
     let parallel_decode_time = Instant::now();
-    for i in 0..tests {
-        let encoding = &encodings[i];
+    for (i, encoding) in encodings.iter().enumerate().take(tests) {
         crypto::decode_eight_blocks(&encoding[0..4096], &key[0..32], i);
     }
     let average_parallel_decode_time =
@@ -167,7 +165,7 @@ fn run_simulator() {
 
     // build merkle tree
     #[allow(non_upper_case_globals)]
-    static digest: &'static Algorithm = &SHA512;
+    static digest: &Algorithm = &SHA512;
     let merkle_values = (0..255).map(|x| vec![x]).collect::<Vec<_>>();
     let merkle_tree = MerkleTree::from_vec(digest, merkle_values.clone());
     let merkle_proofs = merkle_values

@@ -49,7 +49,7 @@ pub fn prove(challenge: &[u8], solution: &Solution, keys: &Keypair) -> Proof {
     }
 }
 
-pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &Vec<u8>) -> bool {
+pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bool {
     // derive the challenge index
     let index = utils::modulo(&proof.challenge, piece_count);
 
@@ -72,7 +72,7 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &Vec<u8>) ->
     // verify signature
     let public_key = PublicKey::from_bytes(&proof.public_key).unwrap();
     let signature = Signature::from_bytes(&proof.signature).unwrap();
-    if !public_key.verify(&proof.tag, &signature).is_ok() {
+    if public_key.verify(&proof.tag, &signature).is_err() {
         println!("Invalid proof, signature is invalid");
         return false;
     }

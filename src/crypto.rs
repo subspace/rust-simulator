@@ -44,7 +44,7 @@ pub fn create_hmac(message: &[u8], challenge: &[u8]) -> Vec<u8> {
 pub fn encode(piece: &[u8], index: u32, id: &[u8]) -> Vec<u8> {
     let mut iv = [0u8; 16];
     iv.as_mut().write_u32::<BigEndian>(index).unwrap();
-    let mut buffer = [0u8; 809600].to_vec();
+    let mut buffer = [0u8; 809_600].to_vec();
     let mut encoding = piece.to_vec();
     for _ in 0..ROUNDS {
         let pos = encoding.len();
@@ -82,11 +82,11 @@ pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
         // xor iv or feedback with source block
         if b == 0 {
             for i in 0..crate::BLOCK_SIZE {
-                block[i] = block[i] ^ iv[i];
+                block[i] ^= iv[i];
             }
         } else {
             for i in 0..crate::BLOCK_SIZE {
-                block[i] = block[i] ^ piece[i + block_offset];
+                block[i] ^= piece[i + block_offset];
             }
         }
 
@@ -125,9 +125,9 @@ pub fn decode_single_block(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
         let previous_block_offset = block_offset - crate::BLOCK_SIZE;
         for i in 0..crate::BLOCK_SIZE {
             if b == 0 {
-                block[i] = block[i] ^ iv[i];
+                block[i] ^= iv[i];
             } else {
-                block[i] = block[i] ^ encoding[previous_block_offset + i];
+                block[i] ^= encoding[previous_block_offset + i];
             }
         }
 
@@ -172,15 +172,14 @@ pub fn encode_eight_blocks(pieces: Vec<Vec<u8>>, id: &[u8], index: usize) -> Vec
         if block == 0 {
             for piece in 0..PIECES_PER_ROUND {
                 for byte in 0..crate::BLOCK_SIZE {
-                    block8[piece][byte] = block8[piece][byte] ^ ivs[piece][byte];
+                    block8[piece][byte] ^= ivs[piece][byte];
                 }
             }
         } else {
             let previous_block_offset = block_offset - crate::BLOCK_SIZE;
             for piece in 0..PIECES_PER_ROUND {
                 for byte in 0..crate::BLOCK_SIZE {
-                    block8[piece][byte] =
-                        block8[piece][byte] ^ encodings[piece][previous_block_offset + byte];
+                    block8[piece][byte] ^= encodings[piece][previous_block_offset + byte];
                 }
             }
         }
@@ -233,12 +232,12 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
         if batch == 0 {
             for block in 0..BATCH_SIZE {
                 if block == 0 {
-                    for byte in 0..crate::BLOCK_SIZE {
-                        block8[block][byte] = block8[block][byte] ^ iv[byte];
+                    for (byte, iv_item) in iv.iter().enumerate().take(crate::BLOCK_SIZE) {
+                        block8[block][byte] ^= *iv_item;
                     }
                 } else {
                     for byte in 0..crate::BLOCK_SIZE {
-                        block8[block][byte] = block8[block][byte] ^ encoding[block_offset + byte];
+                        block8[block][byte] ^= encoding[block_offset + byte];
                     }
                     block_offset += crate::BLOCK_SIZE;
                 }
@@ -246,7 +245,7 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
         } else {
             for block in 0..BATCH_SIZE {
                 for byte in 0..crate::BLOCK_SIZE {
-                    block8[block][byte] = block8[block][byte] ^ encoding[block_offset + byte];
+                    block8[block][byte] ^= encoding[block_offset + byte];
                 }
                 block_offset += crate::BLOCK_SIZE;
             }
