@@ -91,43 +91,36 @@ fn validate_encoding() {
 
 fn test_encoding_speed() {
     let tests = 800;
-    let piece = crypto::random_bytes(4096);
     let key = crypto::random_bytes(32);
 
+    let pieces: Vec<Vec<u8>> = (0..tests).map(|_| crypto::random_bytes(4096)).collect();
+
     // measure simple encode time
-    let encode_start_time = Instant::now();
-    for i in 0..tests {
-        crypto::encode_single_block(&piece, &key[0..32], i);
-    }
-    let encode_time = encode_start_time.elapsed().as_nanos();
-    println!("Simple encode time is : {} ms", encode_time / (1000 * 1000));
-    let average_encode_time = (encode_time / tests as u128) / (1000);
-    println!(
-        "Average simple encode time is {} micro seconds",
-        average_encode_time
+    test_encoding_speed_run(&pieces, &key, "single", test_encoding_speed_single_block);
+
+    // measure 8 blocks encode time
+    test_encoding_speed_run(&pieces, &key, "8 blocks", test_encoding_speed_8_blocks);
+
+    // measure parallel encode time
+    test_encoding_speed_run(
+        &pieces,
+        &key,
+        "single parallel",
+        test_encoding_speed_parallel_single_block,
     );
 
     // measure parallel encode time
-    let pieces: Vec<Vec<u8>> = (0..8).map(|_| crypto::random_bytes(4096)).collect();
-    let parallel_encode_start_time = Instant::now();
-    for i in 0..(tests / 8) {
-        crypto::encode_eight_blocks(&pieces, &key[0..32], i);
-    }
-    let parallel_encode_time = parallel_encode_start_time.elapsed().as_nanos();
-
-    println!(
-        "Parallel encode time is {} ms",
-        parallel_encode_time / (1000 * 1000)
+    test_encoding_speed_run(
+        &pieces,
+        &key,
+        "8 blocks parallel",
+        test_encoding_speed_parallel_8_blocks,
     );
 
-    let average_parallel_encode_time = (parallel_encode_time / tests as u128) / (1000);
-    println!(
-        "Average parallel encode time is {} micro seconds",
-        average_parallel_encode_time
-    );
-
-    let encodings: Vec<Vec<u8>> = (0..tests)
-        .map(|i| crypto::encode_single_block(&piece, &key[0..32], i))
+    let encodings: Vec<Vec<u8>> = pieces
+        .iter()
+        .enumerate()
+        .map(|(i, piece)| crypto::encode_single_block(&piece, &key[0..32], i))
         .collect();
 
     // measure simple decode time
@@ -153,6 +146,49 @@ fn test_encoding_speed() {
         "Average parallel decode time is {} micro seconds",
         average_parallel_decode_time
     );
+}
+
+fn test_encoding_speed_run(
+    pieces: &[Vec<u8>],
+    key: &[u8],
+    test_name: &str,
+    encoder: fn(pieces: &[Vec<u8>], key: &[u8]),
+) {
+    // measure simple encode time
+    let encode_start_time = Instant::now();
+    encoder(pieces, key);
+    let encode_time = encode_start_time.elapsed();
+    println!(
+        "Encode time for {} is {}ms",
+        test_name,
+        encode_time.as_millis()
+    );
+    println!(
+        "Average encode time for {} is {}us",
+        test_name,
+        encode_time.as_micros() / pieces.len() as u128
+    );
+}
+
+fn test_encoding_speed_single_block(pieces: &[Vec<u8>], key: &[u8]) {
+    for (i, piece) in pieces.iter().enumerate() {
+        crypto::encode_single_block(piece, &key, i);
+    }
+}
+
+fn test_encoding_speed_8_blocks(pieces: &[Vec<u8>], key: &[u8]) {
+    let chunk_size = 8;
+    for (chunk, pieces) in pieces.chunks(chunk_size).enumerate() {
+        crypto::encode_eight_blocks(pieces, key, chunk * chunk_size);
+    }
+}
+
+fn test_encoding_speed_parallel_single_block(pieces: &[Vec<u8>], key: &[u8]) {
+    crypto::encode_single_block_in_parallel(pieces, key);
+}
+
+fn test_encoding_speed_parallel_8_blocks(pieces: &[Vec<u8>], key: &[u8]) {
+    crypto::encode_eight_blocks_in_parallel(pieces, key);
 }
 
 fn run_simulator() {
