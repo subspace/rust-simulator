@@ -26,8 +26,8 @@ pub fn measure_quality(tag: &[u8]) -> u8 {
 }
 
 pub fn xor_bytes(a: &mut [u8], b: &[u8]) {
-    for i in 0..a.len() {
-        a[i] ^= b[i];
+    for (i, a_byte) in a.iter_mut().enumerate() {
+        *a_byte ^= b[i];
     }
 }
 
@@ -62,7 +62,7 @@ pub fn usize_to_bytes(number: usize) -> [u8; 16] {
     iv
 }
 
-pub fn print_bytes(bytes: Vec<u8>) {
+pub fn print_bytes(bytes: &[u8]) {
     for (i, slice) in bytes.chunks(16).enumerate() {
         println!("Block {}:\t {}", i, hex::encode(slice.to_vec()));
     }

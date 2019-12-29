@@ -29,19 +29,17 @@ fn main() {
 fn validate_encoding() {
     let piece = crypto::random_bytes(4096);
     let key = crypto::random_bytes(32);
-    let piece_hash = crypto::digest_sha_256(&piece[0..4096]);
+    let piece_hash = crypto::digest_sha_256(&piece);
     let index: usize = 2_342_345_234;
-    let simple_encoding = crypto::encode_single_block(&piece[0..4096], &key[0..32], index);
-    // let simple_encoding_hash = crypto::digest_sha_256(&simple_encoding[0..4096]);
-    let simple_decoding =
-        crypto::decode_single_block(&simple_encoding[0..4096], &key[0..32], index);
-    let simple_decoding_hash = crypto::digest_sha_256(&simple_decoding[0..4096]);
-    let parallel_decoding =
-        crypto::decode_eight_blocks(&simple_encoding[0..4096], &key[0..32], index);
-    let parallel_decoding_hash = crypto::digest_sha_256(&parallel_decoding[0..4096]);
+    let simple_encoding = crypto::encode_single_block(&piece, &key, index);
+    // let simple_encoding_hash = crypto::digest_sha_256(&simple_encoding);
+    let simple_decoding = crypto::decode_single_block(&simple_encoding, &key, index);
+    let simple_decoding_hash = crypto::digest_sha_256(&simple_decoding);
+    let parallel_decoding = crypto::decode_eight_blocks(&simple_encoding, &key, index);
+    let parallel_decoding_hash = crypto::digest_sha_256(&parallel_decoding);
 
     // does simple decoding match piece?
-    if utils::are_arrays_equal(&piece_hash[0..32], &simple_decoding_hash[0..32]) {
+    if utils::are_arrays_equal(&piece_hash, &simple_decoding_hash) {
         println!("Success! -- Simple decoding matches piece");
     } else {
         println!("Failure! -- Simple decoding does not match piece\n");
@@ -49,7 +47,7 @@ fn validate_encoding() {
     }
 
     // does parallel decoding match piece
-    if utils::are_arrays_equal(&piece_hash[0..32], &parallel_decoding_hash[0..32]) {
+    if utils::are_arrays_equal(&piece_hash, &parallel_decoding_hash) {
         println!("Success! -- Parallel decoding matches piece");
     } else {
         println!("Failure! -- Parallel decoding does not match piece\n");
@@ -61,10 +59,10 @@ fn validate_encoding() {
         .iter()
         .map(|piece| crypto::digest_sha_256(piece))
         .collect();
-    let encodings = crypto::encode_eight_blocks(&pieces, &key[0..32], index);
+    let encodings = crypto::encode_eight_blocks(&pieces, &key, index);
     for (i, encoding) in encodings.iter().enumerate() {
-        let decoding = crypto::decode_single_block(encoding, &key[0..32], index + i);
-        let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
+        let decoding = crypto::decode_single_block(encoding, &key, index + i);
+        let decoding_hash = crypto::digest_sha_256(&decoding);
         if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
             println!("Failure! -- Parallel encoding does not match simple decoding for piece\n");
             utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
@@ -75,8 +73,8 @@ fn validate_encoding() {
 
     // does parallel decoding match parallel encoding?
     for (i, encoding) in encodings.iter().enumerate() {
-        let decoding = crypto::decode_eight_blocks(encoding, &key[0..32], index + i);
-        let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
+        let decoding = crypto::decode_eight_blocks(encoding, &key, index + i);
+        let decoding_hash = crypto::digest_sha_256(&decoding);
         if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
             println!("Failure! -- Parallel encoding does not match parallel decoding for piece\n");
             utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
@@ -117,13 +115,13 @@ fn test_encoding_speed() {
     let encodings: Vec<Vec<u8>> = pieces
         .iter()
         .enumerate()
-        .map(|(i, piece)| crypto::encode_single_block(&piece, &key[0..32], i))
+        .map(|(i, piece)| crypto::encode_single_block(&piece, &key, i))
         .collect();
 
     // measure simple decode time
     let simple_decode_time = Instant::now();
     for (i, encoding) in encodings.iter().enumerate().take(tests) {
-        crypto::decode_single_block(&encoding[0..4096], &key[0..32], i);
+        crypto::decode_single_block(&encoding, &key, i);
     }
     let average_simple_decode_time =
         (simple_decode_time.elapsed().as_nanos() / tests as u128) / (1000);
@@ -135,7 +133,7 @@ fn test_encoding_speed() {
     // measure parallel decode time
     let parallel_decode_time = Instant::now();
     for (i, encoding) in encodings.iter().enumerate().take(tests) {
-        crypto::decode_eight_blocks(&encoding[0..4096], &key[0..32], i);
+        crypto::decode_eight_blocks(&encoding, &key, i);
     }
     let average_parallel_decode_time =
         (parallel_decode_time.elapsed().as_nanos() / tests as u128) / (1000);
@@ -191,7 +189,7 @@ fn test_encoding_speed_parallel_8_blocks(pieces: &[Vec<u8>], key: &[u8]) {
 fn run_simulator() {
     // create random genesis piece
     let genesis_piece = crypto::random_bytes(4096);
-    let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece[0..4096]);
+    let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
 
     // generate random identity
     let keys = crypto::gen_keys();
@@ -225,7 +223,7 @@ fn run_simulator() {
         let encoding = crypto::encode_single_block(&genesis_piece, &id, i);
         plot.add(&encoding, i);
 
-        // let hash = crypto::digest_sha_256(&encoding[0..4096]);
+        // let hash = crypto::digest_sha_256(&encoding);
         // println!("Encoded piece {} with hash: {:x?}", i, hash);
         // println!("{}", encoding.len());
     }
@@ -244,9 +242,9 @@ fn run_simulator() {
     // println!("challenge: {:x?}", challenge);
     let quality_threshold = 0;
     for _ in 0..evaluations {
-        let solution = spv::solve(&challenge[0..32], PIECE_COUNT, &mut plot);
+        let solution = spv::solve(&challenge, PIECE_COUNT, &mut plot);
         if solution.quality >= quality_threshold {
-            let proof = spv::prove(&challenge[0..32], &solution, &keys);
+            let proof = spv::prove(&challenge, &solution, &keys);
             spv::verify(proof, PIECE_COUNT, &genesis_piece_hash);
             let mut merkle_index = solution.index % 256;
             if merkle_index == 255 {
@@ -256,7 +254,7 @@ fn run_simulator() {
             if !merkle_proof.validate(merkle_root) {
                 println!("Invalid proof, merkle proof is invalid");
             }
-            challenge = crypto::digest_sha_256(&solution.tag[0..32]);
+            challenge = crypto::digest_sha_256(&solution.tag);
         }
     }
 
