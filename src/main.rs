@@ -92,7 +92,7 @@ fn test_encoding_speed() {
     test_encoding_speed_run(&pieces, &key, "single block, single core", test_encoding_speed_single_block);
 
     // measure 8 blocks encode time
-    test_encoding_speed_run(&pieces, &key, "8 blocks, single core", test_encoding_speed_8_blocks);
+    test_encoding_speed_run(&pieces, &key, "eight blocks, single core", test_encoding_speed_8_blocks);
 
     // measure parallel encode time
     test_encoding_speed_run(
@@ -106,7 +106,7 @@ fn test_encoding_speed() {
     test_encoding_speed_run(
         &pieces,
         &key,
-        "8 blocks, parallel cores",
+        "eight blocks, parallel cores",
         test_encoding_speed_parallel_8_blocks,
     );
 
@@ -122,9 +122,9 @@ fn test_encoding_speed() {
         crypto::decode_single_block(&encoding, &key, i);
     }
     let average_simple_decode_time =
-        (simple_decode_time.elapsed().as_nanos() / tests as u128) / (1000);
+        (simple_decode_time.elapsed().as_nanos() / tests as u128) as f32 / (1000f32 * 1000f32);
     println!(
-        "Average simple decode time is {} micro seconds",
+        "Average decode time (per piece) for single block, single core is {:.3}ms",
         average_simple_decode_time
     );
 
@@ -134,9 +134,9 @@ fn test_encoding_speed() {
         crypto::decode_eight_blocks(&encoding, &key, i);
     }
     let average_parallel_decode_time =
-        (parallel_decode_time.elapsed().as_nanos() / tests as u128) / (1000);
+        (parallel_decode_time.elapsed().as_nanos() / tests as u128) as f32 / (1000f32 * 1000f32);
     println!(
-        "Average parallel decode time is {} micro seconds",
+        "Average decode time (per piece) for eight blocks, single core is {:.3}ms",
         average_parallel_decode_time
     );
 }
@@ -151,15 +151,15 @@ fn test_encoding_speed_run(
     let encode_start_time = Instant::now();
     encoder(pieces, key);
     let encode_time = encode_start_time.elapsed();
+    // println!(
+    //     "Total encode time (all pieces) for {} is {:.3}ms",
+    //     test_name,
+    //     encode_time.as_micros() as f32 / 1000f32
+    // );
     println!(
-        "Total encode time (all pieces) for {} is {:.3}ms",
+        "Average encode time (per piece) for {} is {:.3}ms",
         test_name,
-        encode_time.as_micros() as f32 / 1000f32
-    );
-    println!(
-        "Average encode time (one piece) for {} is {:.3}us",
-        test_name,
-        (encode_time.as_nanos() / pieces.len() as u128) as f32 / 1000f32
+        (encode_time.as_nanos() / pieces.len() as u128) as f32 / (1000f32 * 1000f32)
     );
 }
 
@@ -264,7 +264,6 @@ fn run_simulator() {
         average_evaluate_time
     );
 
-    // multi-threaded encoding and encoding
     // create a simple block and add to ledger
     // std async io instead of tokio for file system
     // gossip the block over the network
