@@ -1,10 +1,4 @@
-extern crate ed25519_dalek;
-extern crate rand;
-extern crate ring;
-extern crate sha2;
-
-use super::utils;
-
+use crate::utils;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 use aes::Aes256;
@@ -12,10 +6,13 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
+use ed25519_dalek;
 use ed25519_dalek::Keypair;
+use rand;
 use rand::rngs::OsRng;
 use rand::Rng;
 use rayon::prelude::*;
+use ring;
 use ring::{digest, hmac};
 
 const ROUNDS: usize = 1;

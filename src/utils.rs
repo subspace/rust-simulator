@@ -1,11 +1,10 @@
-extern crate bitintr;
-extern crate hex;
-extern crate num_bigint;
-extern crate num_traits;
-
+use bitintr;
 use bitintr::Lzcnt;
+use hex;
 use itertools::izip;
+use num_bigint;
 use num_bigint::{BigUint, ToBigUint};
+use num_traits;
 use num_traits::cast::ToPrimitive;
 use std::io::Write;
 

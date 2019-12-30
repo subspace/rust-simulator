@@ -1,11 +1,9 @@
 #![allow(dead_code)]
-extern crate merkle;
-
+use merkle;
 mod crypto;
 mod plotter;
 mod spv;
 mod utils;
-
 use merkle::MerkleTree;
 use ring::digest::{Algorithm, SHA512};
 use std::path::Path;

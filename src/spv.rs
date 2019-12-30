@@ -1,8 +1,7 @@
-extern crate ed25519_dalek;
-
 use super::crypto;
 use super::plotter;
 use super::utils;
+use ed25519_dalek;
 
 use ed25519_dalek::{Keypair, PublicKey, Signature};
 
