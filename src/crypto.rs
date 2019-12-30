@@ -1,10 +1,4 @@
-extern crate ed25519_dalek;
-extern crate rand;
-extern crate ring;
-extern crate sha2;
-
-use super::utils;
-
+use crate::utils;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 use aes::Aes256;
@@ -12,9 +6,13 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
+use ed25519_dalek;
 use ed25519_dalek::Keypair;
+use rand;
 use rand::rngs::OsRng;
 use rand::Rng;
+use rayon::prelude::*;
+use ring;
 use ring::{digest, hmac};
 
 const ROUNDS: usize = 1;
@@ -22,12 +20,9 @@ const ROUNDS: usize = 1;
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 
 pub fn random_bytes(byte_length: usize) -> Vec<u8> {
-    let mut byte_vec: Vec<u8> = Vec::with_capacity(byte_length);
-    let mut rng = rand::thread_rng();
-    for _ in 0..byte_length {
-        byte_vec.push(rng.gen());
-    }
-    byte_vec
+    let mut bytes = vec![0u8; byte_length];
+    rand::thread_rng().fill(&mut bytes[..]);
+    bytes
 }
 
 pub fn gen_keys() -> ed25519_dalek::Keypair {
@@ -47,7 +42,7 @@ pub fn create_hmac(message: &[u8], challenge: &[u8]) -> Vec<u8> {
 pub fn encode(piece: &[u8], index: u32, id: &[u8]) -> Vec<u8> {
     let mut iv = [0u8; 16];
     iv.as_mut().write_u32::<BigEndian>(index).unwrap();
-    let mut buffer = [0u8; 809600].to_vec();
+    let mut buffer = [0u8; 809_600].to_vec();
     let mut encoding = piece.to_vec();
     for _ in 0..ROUNDS {
         let pos = encoding.len();
@@ -75,7 +70,7 @@ pub fn decode(encoding: &[u8], index: u32, id: &[u8]) -> Vec<u8> {
 pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
     // setup the cipher
     let iv = utils::usize_to_bytes(index);
-    let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
+    let key = GenericArray::from_slice(id);
     let mut block = GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
     let mut encoding: Vec<u8> = Vec::new();
     let cipher = Aes256::new(&key);
@@ -85,11 +80,11 @@ pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
         // xor iv or feedback with source block
         if b == 0 {
             for i in 0..crate::BLOCK_SIZE {
-                block[i] = block[i] ^ iv[i];
+                block[i] ^= iv[i];
             }
         } else {
             for i in 0..crate::BLOCK_SIZE {
-                block[i] = block[i] ^ piece[i + block_offset];
+                block[i] ^= piece[i + block_offset];
             }
         }
 
@@ -99,7 +94,7 @@ pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
         }
 
         // append encoded block to encoding
-        encoding.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
+        encoding.extend_from_slice(&block);
         block_offset += crate::BLOCK_SIZE;
     }
     encoding
@@ -109,7 +104,7 @@ pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
 pub fn decode_single_block(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> {
     // setup the cipher
     let iv = utils::usize_to_bytes(index);
-    let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
+    let key = GenericArray::from_slice(id);
     let mut piece: Vec<u8> = Vec::new();
     let cipher = Aes256::new(&key);
     let mut block_offset = 0;
@@ -128,28 +123,28 @@ pub fn decode_single_block(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
         let previous_block_offset = block_offset - crate::BLOCK_SIZE;
         for i in 0..crate::BLOCK_SIZE {
             if b == 0 {
-                block[i] = block[i] ^ iv[i];
+                block[i] ^= iv[i];
             } else {
-                block[i] = block[i] ^ encoding[previous_block_offset + i];
+                block[i] ^= encoding[previous_block_offset + i];
             }
         }
 
         // append decoded block to piece
-        piece.extend_from_slice(&block[0..crate::BLOCK_SIZE]);
+        piece.extend_from_slice(&block);
         block_offset += crate::BLOCK_SIZE;
     }
     piece
 }
 
 /// Encodes a single block at a time for eight different pieces on a single core, using instruction-level parallelism
-pub fn encode_eight_blocks(pieces: Vec<Vec<u8>>, id: &[u8], index: usize) -> Vec<Vec<u8>> {
+pub fn encode_eight_blocks(pieces: &[Vec<u8>], id: &[u8], index: usize) -> Vec<Vec<u8>> {
     // setup the cipher
     const PIECES_PER_ROUND: usize = 8;
     let mut ivs: Vec<[u8; 16]> = Vec::new();
     for i in 0..PIECES_PER_ROUND {
         ivs.push(utils::usize_to_bytes(index + i));
     }
-    let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
+    let key = GenericArray::from_slice(id);
     let seed_block = GenericArray::clone_from_slice(&pieces[0][0..crate::BLOCK_SIZE]);
     // try into -- converts slice into fixed size array
     let mut block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
@@ -166,24 +161,22 @@ pub fn encode_eight_blocks(pieces: Vec<Vec<u8>>, id: &[u8], index: usize) -> Vec
         // load the blocks at the same index across all pieces into block8
         let next_block_offset = block_offset + crate::BLOCK_SIZE;
         for piece in 0..PIECES_PER_ROUND {
-            block8[piece] = GenericArray::clone_from_slice(
-                &pieces[piece][block_offset..next_block_offset],
-            );
+            block8[piece] =
+                GenericArray::clone_from_slice(&pieces[piece][block_offset..next_block_offset]);
         }
 
         // xor iv or feedback with source block
         if block == 0 {
             for piece in 0..PIECES_PER_ROUND {
                 for byte in 0..crate::BLOCK_SIZE {
-                    block8[piece][byte] = block8[piece][byte] ^ ivs[piece][byte];
+                    block8[piece][byte] ^= ivs[piece][byte];
                 }
             }
         } else {
             let previous_block_offset = block_offset - crate::BLOCK_SIZE;
             for piece in 0..PIECES_PER_ROUND {
                 for byte in 0..crate::BLOCK_SIZE {
-                    block8[piece][byte] =
-                        block8[piece][byte] ^ encodings[piece][previous_block_offset + byte];
+                    block8[piece][byte] ^= encodings[piece][previous_block_offset + byte];
                 }
             }
         }
@@ -195,7 +188,7 @@ pub fn encode_eight_blocks(pieces: Vec<Vec<u8>>, id: &[u8], index: usize) -> Vec
 
         // append each block to encoding in encoding vec
         for piece in 0..PIECES_PER_ROUND {
-            encodings[piece].extend_from_slice(&block8[piece][0..crate::BLOCK_SIZE]);
+            encodings[piece].extend_from_slice(&block8[piece]);
         }
 
         block_offset += crate::BLOCK_SIZE;
@@ -208,27 +201,30 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
     // setup the cipher
     const BATCH_SIZE: usize = 8;
     let iv = utils::usize_to_bytes(index);
-    let key = GenericArray::from_slice(&id[0..crate::ID_SIZE]);
+    let key = GenericArray::from_slice(id);
     let block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
     let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
     let mut piece: Vec<u8> = Vec::new();
     let cipher = Aes256::new(&key);
     let mut block_offset = 0;
 
-    for batch in 0..(crate::BLOCKS_PER_PIECE / BATCH_SIZE) { // 32 by default
+    for batch in 0..(crate::BLOCKS_PER_PIECE / BATCH_SIZE) {
+        // 32 by default
         // load blocks
         let batch_start = batch * BATCH_SIZE * crate::BLOCK_SIZE;
         let mut block_in_batch_offset = 0;
-        for block in 0..BATCH_SIZE {  // 8 by default
+        for block in 0..BATCH_SIZE {
+            // 8 by default
             block8[block] = GenericArray::clone_from_slice(
                 &encoding[batch_start + block_in_batch_offset
-                ..batch_start + block_in_batch_offset + crate::BLOCK_SIZE],
+                    ..batch_start + block_in_batch_offset + crate::BLOCK_SIZE],
             );
             block_in_batch_offset += crate::BLOCK_SIZE;
         }
 
         // decrypt blocks
-        for _ in 0..crate::ROUNDS { // 24 rounds by default
+        for _ in 0..crate::ROUNDS {
+            // 24 rounds by default
             cipher.decrypt_blocks(&mut block8);
         }
 
@@ -236,12 +232,12 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
         if batch == 0 {
             for block in 0..BATCH_SIZE {
                 if block == 0 {
-                    for byte in 0..crate::BLOCK_SIZE {
-                        block8[block][byte] = block8[block][byte] ^ iv[byte];
+                    for (byte, iv_item) in iv.iter().enumerate() {
+                        block8[block][byte] ^= *iv_item;
                     }
                 } else {
                     for byte in 0..crate::BLOCK_SIZE {
-                        block8[block][byte] = block8[block][byte] ^ encoding[block_offset + byte];
+                        block8[block][byte] ^= encoding[block_offset + byte];
                     }
                     block_offset += crate::BLOCK_SIZE;
                 }
@@ -249,7 +245,7 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
         } else {
             for block in 0..BATCH_SIZE {
                 for byte in 0..crate::BLOCK_SIZE {
-                    block8[block][byte] = block8[block][byte] ^ encoding[block_offset + byte];
+                    block8[block][byte] ^= encoding[block_offset + byte];
                 }
                 block_offset += crate::BLOCK_SIZE;
             }
@@ -258,7 +254,7 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
         // append blocks
         for block in 0..BATCH_SIZE {
             // 8 by default
-            piece.extend_from_slice(&block8[block][0..crate::BLOCK_SIZE]);
+            piece.extend_from_slice(&block8[block]);
         }
     }
     piece
@@ -266,8 +262,21 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
 
 /// encodes multiple pieces in parallel, with each piece encoded on a different core, with only one piece being encoded at each core at a time.
 /// Throughput -> O(Number_Of_Cores)
-pub fn encode_single_block_in_parallel() {}
+pub fn encode_single_block_in_parallel(pieces: &[Vec<u8>], id: &[u8]) -> Vec<Vec<u8>> {
+    pieces
+        .par_iter()
+        .enumerate()
+        .map(|(index, piece)| encode_single_block(piece, id, index))
+        .collect()
+}
 
 /// encodes multiple pieces in parallel, with each piece encoded on a different core, while using instruction level parallelism to encode many different pieces on the same core in parallel.
 /// Throughput -> O(Number_of_cores x 8)
-pub fn encode_eight_blocks_in_parallel() {}
+pub fn encode_eight_blocks_in_parallel(pieces: &[Vec<u8>], id: &[u8]) -> Vec<Vec<u8>> {
+    pieces
+        .par_chunks(8)
+        .enumerate()
+        .map(|(chunk, pieces)| encode_eight_blocks(pieces, id, chunk * 8))
+        .flatten()
+        .collect()
+}

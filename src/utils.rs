@@ -1,13 +1,12 @@
-extern crate bitintr;
-extern crate hex;
-extern crate num_bigint;
-extern crate num_traits;
-
+use bitintr;
 use bitintr::Lzcnt;
-use byteorder::BigEndian;
-use byteorder::WriteBytesExt;
+use hex;
+use itertools::izip;
+use num_bigint;
 use num_bigint::{BigUint, ToBigUint};
+use num_traits;
 use num_traits::cast::ToPrimitive;
+use std::io::Write;
 
 pub fn are_arrays_equal(a: &[u8], b: &[u8]) -> bool {
     a.cmp(b) == std::cmp::Ordering::Equal
@@ -26,8 +25,8 @@ pub fn measure_quality(tag: &[u8]) -> u8 {
 }
 
 pub fn xor_bytes(a: &mut [u8], b: &[u8]) {
-    for i in 0..a.len() {
-        a[i] ^= b[i];
+    for (i, a_byte) in a.iter_mut().enumerate() {
+        *a_byte ^= b[i];
     }
 }
 
@@ -55,28 +54,33 @@ pub fn bigint_to_usize(bigint: BigUint) -> usize {
 // to_le_bytes().as_ref()
 pub fn usize_to_bytes(number: usize) -> [u8; 16] {
     let mut iv = [0u8; 16];
-    iv.as_mut().write_u32::<BigEndian>(number as u32).unwrap();
+    // TODO: We probably want to use LE instead for performance reasons
+    iv.as_mut()
+        .write_all(&(number as u32).to_be_bytes())
+        .unwrap();
     iv
 }
 
-pub fn print_bytes(bytes: Vec<u8>) {
-    let vec_slices: Vec<&[u8]> = bytes.chunks(16).collect();
-    for (i, slice) in vec_slices.iter().enumerate() {
+pub fn print_bytes(bytes: &[u8]) {
+    for (i, slice) in bytes.chunks(16).enumerate() {
         println!("Block {}:\t {}", i, hex::encode(slice.to_vec()));
     }
 }
 
-pub fn compare_bytes(a: Vec<u8>, b: Vec<u8>, c: Vec<u8>) {
-    let a_slices: Vec<&[u8]> = a.chunks(16).collect();
-    let b_slices: Vec<&[u8]> = b.chunks(16).collect();
-    let c_slices: Vec<&[u8]> = c.chunks(16).collect();
-    for (i, slice) in a_slices.iter().enumerate() {
+pub fn compare_bytes(a: &[u8], b: &[u8], c: &[u8]) {
+    let chunk_size = 16;
+    let zipped_iterator = izip!(
+        a.chunks(chunk_size),
+        b.chunks(chunk_size),
+        c.chunks(chunk_size)
+    );
+    for (i, (a, b, c)) in zipped_iterator.enumerate() {
         println!(
             "Block {}:\t {} \t{} \t{}",
             i,
-            hex::encode(slice.to_vec()),
-            hex::encode(b_slices[i].to_vec()),
-            hex::encode(c_slices[i].to_vec())
+            hex::encode(a),
+            hex::encode(b),
+            hex::encode(c)
         );
         if i % 8 == 7 {
             println!();
