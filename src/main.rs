@@ -15,7 +15,7 @@ pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
 pub const PLOT_SIZE: usize = 1_048_576;
 pub const PIECE_COUNT: usize = PLOT_SIZE / PIECE_SIZE;
-pub const ROUNDS: usize = 48;
+pub const ROUNDS: usize = 2048;
 
 fn main() {
     // validate_encoding();
@@ -89,16 +89,16 @@ fn test_encoding_speed() {
     let pieces: Vec<Vec<u8>> = (0..tests).map(|_| crypto::random_bytes(4096)).collect();
 
     // measure simple encode time
-    test_encoding_speed_run(&pieces, &key, "single", test_encoding_speed_single_block);
+    test_encoding_speed_run(&pieces, &key, "single block, single core", test_encoding_speed_single_block);
 
     // measure 8 blocks encode time
-    test_encoding_speed_run(&pieces, &key, "8 blocks", test_encoding_speed_8_blocks);
+    test_encoding_speed_run(&pieces, &key, "8 blocks, single core", test_encoding_speed_8_blocks);
 
     // measure parallel encode time
     test_encoding_speed_run(
         &pieces,
         &key,
-        "single parallel",
+        "single block, parallel cores",
         test_encoding_speed_parallel_single_block,
     );
 
@@ -106,7 +106,7 @@ fn test_encoding_speed() {
     test_encoding_speed_run(
         &pieces,
         &key,
-        "8 blocks parallel",
+        "8 blocks, parallel cores",
         test_encoding_speed_parallel_8_blocks,
     );
 
@@ -152,12 +152,12 @@ fn test_encoding_speed_run(
     encoder(pieces, key);
     let encode_time = encode_start_time.elapsed();
     println!(
-        "Encode time for {} is {:.3}ms",
+        "Total encode time (all pieces) for {} is {:.3}ms",
         test_name,
         encode_time.as_micros() as f32 / 1000f32
     );
     println!(
-        "Average encode time for {} is {:.3}us",
+        "Average encode time (one piece) for {} is {:.3}us",
         test_name,
         (encode_time.as_nanos() / pieces.len() as u128) as f32 / 1000f32
     );
