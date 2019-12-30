@@ -83,7 +83,7 @@ fn validate_encoding() {
 }
 
 fn test_encoding_speed() {
-    let tests = 800;
+    let tests = 8000;
     let key = crypto::random_bytes(32);
 
     let pieces: Vec<Vec<u8>> = (0..tests).map(|_| crypto::random_bytes(4096)).collect();
