@@ -20,7 +20,6 @@ pub const ROUNDS: usize = 2048;
 // TODO
   // Correct/Optimize Encodings
     // show mean, median, and mode for all time measurements
-    // allocate Vecs with capacity instead of resizing on demand
     // remove check for zero block from all xor loops
     // separate two methods for encode eight blocks
       // same piece, different index (for test plotting)
@@ -43,8 +42,8 @@ pub const ROUNDS: usize = 2048;
   // Test with Docker
 
 fn main() {
-    // validate_encoding();
-    test_encoding_speed();
+    validate_encoding();
+    // test_encoding_speed();
 }
 
 // measure average propagation time
