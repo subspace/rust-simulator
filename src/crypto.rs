@@ -72,7 +72,7 @@ pub fn encode_single_block(piece: &[u8], id: &[u8], index: usize) -> Vec<u8> {
     let iv = utils::usize_to_bytes(index);
     let key = GenericArray::from_slice(id);
     let mut block = GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
-    let mut encoding: Vec<u8> = Vec::new();
+    let mut encoding: Vec<u8> = Vec::with_capacity(4096);
     let cipher = Aes256::new(&key);
     let mut block_offset = 0;
 
@@ -105,7 +105,7 @@ pub fn decode_single_block(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
     // setup the cipher
     let iv = utils::usize_to_bytes(index);
     let key = GenericArray::from_slice(id);
-    let mut piece: Vec<u8> = Vec::new();
+    let mut piece: Vec<u8> = Vec::with_capacity(4096);
     let cipher = Aes256::new(&key);
     let mut block_offset = 0;
 
@@ -152,7 +152,7 @@ pub fn encode_eight_blocks(pieces: &[Vec<u8>], id: &[u8], index: usize) -> Vec<V
     let mut encodings: Vec<Vec<u8>> = Vec::new();
     // simplify with iterators
     for _ in 0..PIECES_PER_ROUND {
-        let encoding: Vec<u8> = Vec::new();
+        let encoding: Vec<u8> = Vec::with_capacity(4096);
         encodings.push(encoding);
     }
     let mut block_offset = 0;
@@ -204,7 +204,7 @@ pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> 
     let key = GenericArray::from_slice(id);
     let block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
     let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
-    let mut piece: Vec<u8> = Vec::new();
+    let mut piece: Vec<u8> = Vec::with_capacity(4096);
     let cipher = Aes256::new(&key);
     let mut block_offset = 0;
 

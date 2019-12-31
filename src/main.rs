@@ -17,6 +17,31 @@ pub const PLOT_SIZE: usize = 1_048_576;
 pub const PIECE_COUNT: usize = PLOT_SIZE / PIECE_SIZE;
 pub const ROUNDS: usize = 2048;
 
+// TODO
+  // Correct/Optimize Encodings
+    // show mean, median, and mode for all time measurements
+    // allocate Vecs with capacity instead of resizing on demand
+    // remove check for zero block from all xor loops
+    // separate two methods for encode eight blocks
+      // same piece, different index (for test plotting)
+      // different pieces, different index (for actual plotting)
+    // decode eight blocks in parallel across multiple cores
+    // use SIMD register and AES-NI explicitly
+      // use registers for hardware XOR operations
+      // use register to set the number of blocks to encode/decode in parallel
+      // use registers to simplify Rijndael (no key expansion)
+    // compile to assembly to check when main memory is called in encode
+    // compile to assembly to check for optimal iterator usage
+    // switch to Little Endian binary encoding and see if any change
+    // disable hyper threading to see if there is any change
+  // Test Plotting
+    // use single piece with parallel core encoding of eight blocks
+    // take in plot location (drive) from CLI args
+    // measure plotting on 1 MB, 100 MB, 1 GB, 100 GB, 1 TB iteratively
+  // Extend with ledger
+  // Extend with network
+  // Test with Docker
+
 fn main() {
     // validate_encoding();
     test_encoding_speed();
@@ -263,9 +288,4 @@ fn run_simulator() {
         "Average evaluation time is {} ms per piece",
         average_evaluate_time
     );
-
-    // create a simple block and add to ledger
-    // std async io instead of tokio for file system
-    // gossip the block over the network
-    // deploy with docker
 }
