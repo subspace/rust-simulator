@@ -342,3 +342,19 @@ pub fn encode_eight_blocks_in_parallel(pieces: &[Vec<u8>], id: &[u8]) -> Vec<Vec
         .flatten()
         .collect()
 }
+
+// pub fn decode_single_block_in_parallel(encodings: &[Vec<u8>], id: &[u8]) -> Vec<Vec<u8>> {
+//   encodings
+//     .par_iter()
+//     .enumerate()
+//     .map(|(index, encoding)| decode_single_block(encoding, id, index))
+//     .collect()
+// }
+
+// pub fn decode_eight_blocks_in_parallel(encodings: &[Vec<u8>], id: &[u8]) -> Vec<Vec<u8>> {
+//   encodings
+//     .par_iter()
+//     .enumerate()
+//     .map(|(index, encoding)| decode_eight_blocks(encoding, id, index))
+//     .collect()
+// }

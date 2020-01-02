@@ -6,6 +6,7 @@ use num_bigint;
 use num_bigint::{BigUint, ToBigUint};
 use num_traits;
 use num_traits::cast::ToPrimitive;
+use std::collections::HashMap;
 use std::io::Write;
 
 pub fn are_arrays_equal(a: &[u8], b: &[u8]) -> bool {
@@ -87,3 +88,28 @@ pub fn compare_bytes(a: &[u8], b: &[u8], c: &[u8]) {
         }
     }
 }
+
+pub fn average(numbers: &[u128]) -> f32 {
+    numbers.iter().sum::<u128>() as f32 / numbers.len() as f32
+}
+
+pub fn median(numbers: &mut [u128]) -> u128 {
+    numbers.sort();
+    let mid = numbers.len() / 2;
+    numbers[mid]
+}
+
+pub fn mode(numbers: &[u128]) -> u128 {
+    let mut occurrences = HashMap::new();
+
+    for &value in numbers {
+        *occurrences.entry(value).or_insert(0) += 1;
+    }
+
+    occurrences
+        .into_iter()
+        .max_by_key(|&(_, count)| count)
+        .map(|(val, _)| val)
+        .expect("Cannot compute the mode of zero numbers")
+}
+
