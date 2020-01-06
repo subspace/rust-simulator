@@ -20,7 +20,6 @@ pub const ROUNDS: usize = 2048;
 
 // TODO
   // Correct/Optimize Encodings
-    // show mean, median, and mode for all time measurements
     // separate two methods for encode eight blocks
       // same piece, different index (for test plotting)
       // different pieces, different index (for actual plotting)
