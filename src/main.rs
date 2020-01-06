@@ -1,14 +1,14 @@
 #![allow(dead_code)]
-use merkle;
+mod benchmarks;
 mod crypto;
 mod plotter;
 mod spv;
 mod utils;
-use merkle::MerkleTree;
+
+use merkle::{ self, MerkleTree };
 use ring::digest::{Algorithm, SHA512};
 use std::path::Path;
 use std::time::Instant;
-mod benchmarks;
 
 pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;

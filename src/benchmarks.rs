@@ -5,16 +5,25 @@ use std::time::Instant;
 pub fn run() {
   validate_encoding();
 
+  println!("Generating test data...\n");
+
   let tests = 800;
   let key = crypto::random_bytes(32);
-  let pieces: Vec<Vec<u8>> = (0..tests).map(|_| crypto::random_bytes(4096)).collect();
+
+  // generate and collect a unique piece for each test 
+  let pieces: Vec<Vec<u8>> = (0..tests)
+    .map(|_| crypto::random_bytes(4096))
+    .collect();
+    
+  // encode and collet a unique encoding for each test
   let encodings: Vec<Vec<u8>> = pieces
       .iter()
       .enumerate()
       .map(|(i, piece)| crypto::encode_single_block(&piece, &key, i))
       .collect();
 
-  // find mean, median, and mode (collect and analyze all times)
+  // test encoding speed by finding the mean, median, and mode of each method
+  println!("Testing fastest encoder/decoder speed distribution of a single piece for {} sample pieces...", tests);
   test_encode_speed(
       &pieces, 
       &key, 
@@ -47,6 +56,8 @@ pub fn run() {
   // decode eight parallel
 
   // test overall throughput (total time / pieces encoded)
+  println!("\nTesting encoder throughput for {} sample pieces as milliseconds per piece...", tests);
+
   test_encode_throughput(
       &pieces,
       &key,
@@ -76,8 +87,7 @@ pub fn run() {
   );
 }
 
-// Speed tests
-
+// Generic encode speed test
 fn test_encode_speed(
   pieces: &[Vec<u8>],
   key: &[u8],
@@ -88,8 +98,9 @@ fn test_encode_speed(
   let mean = utils::average(&times);
   let mode = utils::mode(&times);
   let median = utils::median(&mut times);
+
   println!(
-      "Encode time for {} mean is {:.3}ms, mode is {:.3}ms, and median is {:.3}ms",
+      "Encode time for {}: mean is {:.3}ms, mode is {:.3}ms, and median is {:.3}ms",
       test_name,
       mean as f32 / (1000f32 * 1000f32),
       mode as f32 / (1000f32 * 1000f32),
@@ -114,12 +125,13 @@ fn test_encoding_speed_8_blocks(pieces: &[Vec<u8>], key: &[u8]) -> Vec<u128> {
   for (chunk, pieces) in pieces.chunks(chunk_size).enumerate() {
       let start_time = Instant::now();
       crypto::encode_eight_blocks(pieces, key, chunk * chunk_size);
-      let encode_time = start_time.elapsed().as_nanos() / chunk_size as u128;
+      let encode_time = start_time.elapsed().as_nanos();
       encode_times.push(encode_time);
   }
   encode_times
 }
 
+// Generic decode speed test
 fn test_decode_speed(
   encodings: &[Vec<u8>],
   key: &[u8],
@@ -131,7 +143,7 @@ fn test_decode_speed(
   let mode = utils::mode(&times);
   let median = utils::median(&mut times);
   println!(
-      "Decode time for {} mean is {:.3}ms, mode is {:.3}ms, and median is {:.3}ms",
+      "Decode time for {}: mean is {:.3}ms, mode is {:.3}ms, and median is {:.3}ms",
       test_name,
       mean as f32 / (1000f32 * 1000f32),
       mode as f32 / (1000f32 * 1000f32),
@@ -168,7 +180,7 @@ fn test_decoding_speed_eight_blocks(encodings: &[Vec<u8>], key: &[u8]) -> Vec<u1
 // decoding eight blocks parallel
 
 
-// Throughput tests
+// Generic encoding throughput test
 pub fn test_encode_throughput(
   pieces: &[Vec<u8>],
   key: &[u8],
@@ -207,6 +219,7 @@ fn test_encoding_throughput_parallel_eight_blocks(pieces: &[Vec<u8>], key: &[u8]
 }
 
 fn validate_encoding() {
+  println!("\nValidating encoder/decoder correctness...");
   let piece = crypto::random_bytes(4096);
   let key = crypto::random_bytes(32);
   let piece_hash = crypto::digest_sha_256(&piece);
@@ -234,12 +247,17 @@ fn validate_encoding() {
       utils::compare_bytes(&piece, &simple_encoding, &parallel_decoding);
   }
 
-  let pieces: Vec<Vec<u8>> = (0..8).map(|_| crypto::random_bytes(4096)).collect();
+  let pieces: Vec<Vec<u8>> = (0..8)
+    .map(|_| crypto::random_bytes(4096))
+    .collect();
+
   let piece_hashes: Vec<Vec<u8>> = pieces
       .iter()
       .map(|piece| crypto::digest_sha_256(piece))
       .collect();
+
   let encodings = crypto::encode_eight_blocks(&pieces, &key, index);
+  
   for (i, encoding) in encodings.iter().enumerate() {
       let decoding = crypto::decode_single_block(encoding, &key, index + i);
       let decoding_hash = crypto::digest_sha_256(&decoding);
@@ -249,7 +267,7 @@ fn validate_encoding() {
           return;
       }
   }
-  println!("Success! -- All parallel encodings matches simple decodings for eight pieces");
+  println!("Success! -- All parallel encodings match simple decodings for eight pieces");
 
   // does parallel decoding match parallel encoding?
   for (i, encoding) in encodings.iter().enumerate() {
@@ -261,5 +279,7 @@ fn validate_encoding() {
           return;
       }
   }
-  println!("Success! -- All parallel encodings matches parallel decodings for eight pieces");
+  println!("Success! -- All parallel encodings match parallel decodings for eight pieces");
+
+  println!("All encoders/decoders are correct\n")
 }
