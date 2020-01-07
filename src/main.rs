@@ -15,11 +15,17 @@ pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
 pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
-pub const PLOT_SIZE: usize = 1_048_576;
-pub const PIECE_COUNT: usize = PLOT_SIZE / PIECE_SIZE;
+pub const PLOT_SIZES: [usize; 4] = [
+    1_048_576,        // 1 MB
+    104_857_600,      // 100 MB
+    1_073_741_824,     // 1 GB
+    107_374_182_400,   // 100 GB
+    // 1073741824000,  // 1 TB
+];
 pub const ROUNDS: usize = 2048;
 pub const PIECES_PER_BATCH: usize = 8;
 pub const PIECES_PER_GROUP: usize = 64;
+pub const CHALLENGE_EVALUATIONS: usize = 8000;
 
 // TODO
   // Correct/Optimize Encodings
@@ -40,10 +46,15 @@ pub const PIECES_PER_GROUP: usize = 64;
 
 fn main() {
   // benchmarks::run();
-  simulator();
+  for plot_size in PLOT_SIZES.iter() {
+    simulator(*plot_size);
+  }
+  
 }
 
-fn simulator() {
+fn simulator(plot_size: usize) {
+    println!("Running simulation for {} GB plot with {} challenge evaluations", plot_size as f32 / (1000f32 * 1000f32 * 1000f32), CHALLENGE_EVALUATIONS);
+
     // create random genesis piece
     let genesis_piece = crypto::random_bytes(4096);
     let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
@@ -88,7 +99,7 @@ fn simulator() {
   
     // open the plotter
     println!("Plotting pieces to {} ...", path);
-    let mut plot = plotter::Plot::new(path, PLOT_SIZE);
+    let mut plot = plotter::Plot::new(path, plot_size);
     
     let plot_time = Instant::now();
     let pieces: Vec<Vec<u8>> = (0..PIECES_PER_BATCH)
@@ -96,19 +107,20 @@ fn simulator() {
         .collect();
 
     // plot pieces in groups of 64 divided into batches of 8. Each batch is encoded concurrently on the same core using instruction level parallelism, while all batches (the group) are encoded concurrently across different cores.
-    for group_index in 0..(PIECE_COUNT / PIECES_PER_GROUP) {
-        crypto::encode_eight_blocks_in_parallel_single_piece(&pieces, &id, group_index)
+    let piece_count: usize = plot_size / PIECE_SIZE;
+    for group_index in 0..(piece_count / PIECES_PER_GROUP) {
+        crypto::encode_eight_blocks_in_parallel_single_piece(&pieces, &id, group_index * PIECES_PER_GROUP)
           .iter()
           .enumerate()
           .for_each(|(encoding_index, encoding)| 
             {
               let plotter_index = encoding_index + (group_index * PIECES_PER_GROUP);
-              println!(
-                "Group index is {}, encoding index is {}, plotter index is {}",
-                group_index,
-                encoding_index,
-                plotter_index
-              );
+              // println!(
+              //   "Group index is {}, encoding index is {}, plotter index is {}",
+              //   group_index,
+              //   encoding_index,
+              //   plotter_index
+              // );
               plot.add(&encoding.0, plotter_index);
             }
           )
@@ -118,22 +130,23 @@ fn simulator() {
         // println!("{}", encoding.len());
     }
 
-    let average_plot_time = (plot_time.elapsed().as_nanos() / PIECE_COUNT as u128) as f32 / (1000f32 * 1000f32);
+    let total_plot_time = plot_time.elapsed().as_nanos();
+    let average_plot_time = (total_plot_time / piece_count as u128) as f32 / (1000f32 * 1000f32);
 
     println!("Average plot time is {:.3} ms per piece", average_plot_time);
+    println!("Total plot time is {:.3} hours", total_plot_time as f32 / (1000f32 * 1000f32 * 1000f32 * 60f32 * 60f32));
+    println!("Throughput is {} mb / sec", (plot_size / 1000 * 1000) as f32 / (total_plot_time as f32 / (1000f32 * 1000f32 * 1000f32)));
     println!("Solving, proving, and verifying challenges ...", );
     let evaluate_time = Instant::now();
 
     // start evaluation loop
-    let evaluations: usize = 80;
     let mut challenge = crypto::random_bytes(32);
-    // println!("challenge: {:x?}", challenge);
     let quality_threshold = 0;
-    for _ in 0..evaluations {
-        let solution = spv::solve(&challenge, PIECE_COUNT, &mut plot);
+    for _ in 0..CHALLENGE_EVALUATIONS {
+        let solution = spv::solve(&challenge, piece_count, &mut plot);
         if solution.quality >= quality_threshold {
             let proof = spv::prove(&challenge, &solution, &keys);
-            spv::verify(proof, PIECE_COUNT, &genesis_piece_hash);
+            spv::verify(proof, piece_count, &genesis_piece_hash);
             let mut merkle_index = solution.index % 256;
             if merkle_index == 255 {
                 merkle_index = 0;
@@ -147,10 +160,10 @@ fn simulator() {
     }
 
     let average_evaluate_time =
-        (evaluate_time.elapsed().as_nanos() / evaluations as u128) as f32 / (1000f32 * 1000f32);
+        (evaluate_time.elapsed().as_nanos() / CHALLENGE_EVALUATIONS as u128) as f32 / (1000f32 * 1000f32);
 
     println!(
-        "Average evaluation time is {:.3} ms per piece",
+        "Average evaluation time is {:.3} ms per piece\n",
         average_evaluate_time
     );
 }
