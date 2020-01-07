@@ -18,6 +18,8 @@ pub fn solve(challenge: &[u8], piece_count: usize, plot: &mut plotter::Plot) -> 
     let tag = crypto::create_hmac(&encoding[0..4096], &challenge);
     let quality = utils::measure_quality(&tag);
 
+    // println!("Solve index is {}", index);
+
     Solution {
         index: index as u64,
         tag,
@@ -52,6 +54,9 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bo
     // derive the challenge index
     let index = utils::modulo(&proof.challenge, piece_count);
 
+    // println!("Verify index is {}", index);
+
+
     // is tag correct
     let tag = crypto::create_hmac(&proof.encoding[0..4096], &proof.challenge);
     if !utils::are_arrays_equal(&tag, &proof.tag) {
@@ -65,6 +70,7 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bo
     let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
     if !utils::are_arrays_equal(&genesis_piece_hash[0..32], &decoding_hash[0..32]) {
         println!("Invalid proof, encoding is invalid");
+        // utils::compare_bytes(&proof.encoding, &proof.encoding, &decoding);
         return false;
     }
 

@@ -324,7 +324,7 @@ fn validate_encoding() {
   let single_piece_encodings = crypto::encode_eight_blocks_single_piece(&piece, &key, index);
 
   for (i, encoding) in single_piece_encodings.iter().enumerate() {
-    let decoding = crypto::decode_eight_blocks(encoding, &key, index + i);
+    let decoding = crypto::decode_eight_blocks(&encoding.0, &key, encoding.1);
     let decoding_hash = crypto::digest_sha_256(&decoding);
     if !utils::are_arrays_equal(&decoding_hash, &piece_hash) {
         println!("Failure! -- Parallel encoding of single piece does not match parallel decoding for piece at index {}\n", i);
@@ -341,7 +341,7 @@ fn validate_encoding() {
   let single_piece_parallel_encodings = crypto::encode_eight_blocks_in_parallel_single_piece(&single_pieces, &key, index);
 
   for (i, encoding) in single_piece_parallel_encodings.iter().enumerate() {
-    let decoding = crypto::decode_eight_blocks(encoding, &key, index + i);
+    let decoding = crypto::decode_eight_blocks(&encoding.0, &key, encoding.1);
     let decoding_hash = crypto::digest_sha_256(&decoding);
     if !utils::are_arrays_equal(&decoding_hash, &piece_hash) {
         println!("Failure! -- Parallel encoding of single piece encoded in parallel does not match parallel decoding for piece at index {}\n", i);

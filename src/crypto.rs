@@ -236,26 +236,25 @@ pub fn encode_eight_blocks(pieces: &[Vec<u8>], id: &[u8], index: usize) -> Vec<V
 }
 
 /// Encodes a single block at a time for a single source piece on a single core, using instruction-level parallelism, while iterating a starting index to obtain unique encodings
-pub fn encode_eight_blocks_single_piece(piece: &[u8], id: &[u8], index: usize) -> Vec<Vec<u8>> {
+pub fn encode_eight_blocks_single_piece(piece: &[u8], id: &[u8], start_index: usize) -> Vec<(Vec<u8>, usize)> {
   // setup the cipher
-  const PIECES_PER_ROUND: usize = 8;
-  let mut ivs: Vec<[u8; 16]> = Vec::new();
-  for i in 0..PIECES_PER_ROUND {
-      ivs.push(utils::usize_to_bytes(index + i));
+  let mut ivs: Vec<[u8; crate::BLOCK_SIZE]> = Vec::new();
+  for i in 0..crate::PIECES_PER_BATCH {
+      ivs.push(utils::usize_to_bytes(start_index + i));
   }
   let key = GenericArray::from_slice(id);
   let mut seed_block = GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
-  let mut block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
+  let mut block8 = GenericArray::clone_from_slice(&[seed_block; crate::PIECES_PER_BATCH]);
   let cipher = Aes256::new(&key);
-  let mut encodings: Vec<Vec<u8>> = Vec::new();
-  for _ in 0..PIECES_PER_ROUND {
-      let encoding: Vec<u8> = Vec::with_capacity(4096);
-      encodings.push(encoding);
+  let mut encodings: Vec<(Vec<u8>, usize)> = Vec::new();
+  for i in 0..crate::PIECES_PER_BATCH {
+      let encoding: Vec<u8> = Vec::with_capacity(crate::PIECE_SIZE);
+      encodings.push((encoding, start_index + i));
   }
   let mut block_offset = 0;
 
   // xor iv with source block
-  for piece_index in 0..PIECES_PER_ROUND {
+  for piece_index in 0..crate::PIECES_PER_BATCH {
       for byte in 0..crate::BLOCK_SIZE {
           block8[piece_index][byte] ^= ivs[piece_index][byte];
       }
@@ -267,8 +266,8 @@ pub fn encode_eight_blocks_single_piece(piece: &[u8], id: &[u8], index: usize) -
   }
 
   // append each block to encoding in encoding vec
-  for piece_index in 0..PIECES_PER_ROUND {
-      encodings[piece_index].extend_from_slice(&block8[piece_index]);
+  for piece_index in 0..crate::PIECES_PER_BATCH {
+      encodings[piece_index].0.extend_from_slice(&block8[piece_index]);
   }
 
   block_offset += crate::BLOCK_SIZE;
@@ -277,13 +276,13 @@ pub fn encode_eight_blocks_single_piece(piece: &[u8], id: &[u8], index: usize) -
       // load the blocks at the same index across all pieces into block8
       let next_block_offset = block_offset + crate::BLOCK_SIZE;
       seed_block = GenericArray::clone_from_slice(&piece[block_offset..next_block_offset]);
-      block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
+      block8 = GenericArray::clone_from_slice(&[seed_block; crate::PIECES_PER_BATCH]);
 
       // xor feedback with source block
       let previous_block_offset = block_offset - crate::BLOCK_SIZE;
-      for piece_index in 0..PIECES_PER_ROUND {
+      for piece_index in 0..crate::PIECES_PER_BATCH {
           for byte in 0..crate::BLOCK_SIZE {
-              block8[piece_index][byte] ^= encodings[piece_index][previous_block_offset + byte];
+              block8[piece_index][byte] ^= encodings[piece_index].0[previous_block_offset + byte];
           }
       }
 
@@ -293,8 +292,8 @@ pub fn encode_eight_blocks_single_piece(piece: &[u8], id: &[u8], index: usize) -
       }
 
       // append each block to encoding in encoding vec
-      for piece_index in 0..PIECES_PER_ROUND {
-          encodings[piece_index].extend_from_slice(&block8[piece_index]);
+      for piece_index in 0..crate::PIECES_PER_BATCH {
+          encodings[piece_index].0.extend_from_slice(&block8[piece_index]);
       }
 
       block_offset += crate::BLOCK_SIZE;
@@ -411,14 +410,14 @@ pub fn encode_eight_blocks_in_parallel(pieces: &[Vec<u8>], id: &[u8]) -> Vec<Vec
 }
 
 /// encodes a single block at a time for a single source piece (replicated for simplicity) on multiple cores, using instruction level parallelism, while iterating a starting index to obtain unique encodings
-/// current batch size is 64, assuming a max of 8 cores with 8 pieces per core
-pub fn encode_eight_blocks_in_parallel_single_piece(pieces: &[Vec<u8>], id: &[u8], index: usize) -> Vec<Vec<u8>> {
+/// current group size is 64, assuming a max of 8 cores with 8 batches of 8 pieces per batch
+pub fn encode_eight_blocks_in_parallel_single_piece(pieces: &[Vec<u8>], id: &[u8], group_start_index: usize) -> Vec<(Vec<u8>, usize)> {
     pieces
       .par_iter()
       .enumerate()
       .map(
-        |(piece_index, piece)| 
-        encode_eight_blocks_single_piece(piece, &id, index + piece_index * 8))
+        |(batch_start_index, piece)| 
+        encode_eight_blocks_single_piece(piece, &id, group_start_index + (batch_start_index * crate::PIECES_PER_BATCH)))
       .flatten()
       .collect()
 }
