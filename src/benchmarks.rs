@@ -9,6 +9,7 @@ pub fn run() {
 
   let tests = 800;
   let key = crypto::random_bytes(32);
+  let index: usize = 2_342_345_234; 
 
   // generate and collect a unique piece for each test 
   let pieces: Vec<Vec<u8>> = (0..tests)
@@ -61,6 +62,7 @@ pub fn run() {
   test_encode_throughput(
       &pieces,
       &key,
+      index,
       "single block, single core",
       test_encoding_throughput_single_block,
   );
@@ -68,6 +70,7 @@ pub fn run() {
   test_encode_throughput(
       &pieces,
       &key,
+      index,
       "eight blocks, single cores",
       test_encoding_throughput_eight_blocks,
   );
@@ -75,6 +78,7 @@ pub fn run() {
   test_encode_throughput(
       &pieces,
       &key,
+      index,
       "single block, parallel cores",
       test_encoding_throughput_parallel_single_block,
   );
@@ -82,8 +86,25 @@ pub fn run() {
   test_encode_throughput(
       &pieces,
       &key,
+      index,
       "eight blocks, parallel cores",
       test_encoding_throughput_parallel_eight_blocks,
+  );
+
+  test_encode_throughput(
+    &pieces,
+    &key,
+    index,
+    "eight blocks, single core, single piece",
+    test_encoding_throughput_eight_blocks_single_piece,
+  );
+
+  test_encode_throughput(
+    &pieces,
+    &key,
+    index,
+    "eight blocks, parallel cores, single piece ",
+    test_encoding_throughput_eight_blocks_parallel_single_piece,
   );
 }
 
@@ -184,11 +205,12 @@ fn test_decoding_speed_eight_blocks(encodings: &[Vec<u8>], key: &[u8]) -> Vec<u1
 pub fn test_encode_throughput(
   pieces: &[Vec<u8>],
   key: &[u8],
+  _index: usize,
   test_name: &str,
-  encoder: fn(pieces: &[Vec<u8>], key: &[u8]),
+  encoder: fn(pieces: &[Vec<u8>], key: &[u8], _index: usize),
 ) {
   let encode_start_time = Instant::now();
-  encoder(pieces, key);
+  encoder(pieces, key, _index);
   let encode_time = encode_start_time.elapsed();
   println!(
       "Average encode time (per piece) for {} is {:.3}ms",
@@ -197,25 +219,42 @@ pub fn test_encode_throughput(
   );
 }
 
-fn test_encoding_throughput_single_block(pieces: &[Vec<u8>], key: &[u8]) {
+fn test_encoding_throughput_single_block(pieces: &[Vec<u8>], key: &[u8], _index: usize) {
   for (i, piece) in pieces.iter().enumerate() {
       crypto::encode_single_block(piece, key, i);
   }
 }
 
-fn test_encoding_throughput_eight_blocks(pieces: &[Vec<u8>], key: &[u8]) {
+fn test_encoding_throughput_eight_blocks(pieces: &[Vec<u8>], key: &[u8], _index: usize) {
   let chunk_size = 8;
   for (chunk, pieces) in pieces.chunks(chunk_size).enumerate() {
       crypto::encode_eight_blocks(pieces, key, chunk * chunk_size);
   }
 }
 
-fn test_encoding_throughput_parallel_single_block(pieces: &[Vec<u8>], key: &[u8]) {
+fn test_encoding_throughput_parallel_single_block(pieces: &[Vec<u8>], key: &[u8], _index: usize) {
   crypto::encode_single_block_in_parallel(pieces, key);
 }
 
-fn test_encoding_throughput_parallel_eight_blocks(pieces: &[Vec<u8>], key: &[u8]) {
+fn test_encoding_throughput_parallel_eight_blocks(pieces: &[Vec<u8>], key: &[u8], _index: usize) {
   crypto::encode_eight_blocks_in_parallel(pieces, key);
+}
+
+fn test_encoding_throughput_eight_blocks_single_piece(pieces: &[Vec<u8>], key: &[u8], _index: usize) {
+    for i in 0..(pieces.len() / 8) {
+        crypto::encode_eight_blocks_single_piece(&pieces[0], &key, _index + i * 8);
+    }
+}
+
+fn test_encoding_throughput_eight_blocks_parallel_single_piece(pieces: &[Vec<u8>], key: &[u8], _index: usize) {
+
+    let single_pieces: Vec<Vec<u8>> = (0..8)
+      .map(|_| pieces[0].clone())
+      .collect();
+
+    for i in 0..(pieces.len() / 64) {
+      crypto::encode_eight_blocks_in_parallel_single_piece(&single_pieces, &key, _index + i * 8);
+    }
 }
 
 fn validate_encoding() {
@@ -279,7 +318,38 @@ fn validate_encoding() {
           return;
       }
   }
+
   println!("Success! -- All parallel encodings match parallel decodings for eight pieces");
+
+  let single_piece_encodings = crypto::encode_eight_blocks_single_piece(&piece, &key, index);
+
+  for (i, encoding) in single_piece_encodings.iter().enumerate() {
+    let decoding = crypto::decode_eight_blocks(encoding, &key, index + i);
+    let decoding_hash = crypto::digest_sha_256(&decoding);
+    if !utils::are_arrays_equal(&decoding_hash, &piece_hash) {
+        println!("Failure! -- Parallel encoding of single piece does not match parallel decoding for piece at index {}\n", i);
+        utils::compare_bytes(&piece, &encodings[i], &decoding);
+        return;
+    }
+  }
+  println!("Success! -- All parallel encodings with single source piece match parallel decodings for eight pieces");
+
+  let single_pieces: Vec<Vec<u8>> = (0..8)
+    .map(|_| piece.clone())
+    .collect();
+
+  let single_piece_parallel_encodings = crypto::encode_eight_blocks_in_parallel_single_piece(&single_pieces, &key, index);
+
+  for (i, encoding) in single_piece_parallel_encodings.iter().enumerate() {
+    let decoding = crypto::decode_eight_blocks(encoding, &key, index + i);
+    let decoding_hash = crypto::digest_sha_256(&decoding);
+    if !utils::are_arrays_equal(&decoding_hash, &piece_hash) {
+        println!("Failure! -- Parallel encoding of single piece encoded in parallel does not match parallel decoding for piece at index {}\n", i);
+        utils::compare_bytes(&piece, &encodings[i], &decoding);
+        return;
+    }
+  }
+  println!("Success! -- All parallel encodings with single source piece encoded in parallel match parallel decodings for eight pieces");
 
   println!("All encoders/decoders are correct\n")
 }

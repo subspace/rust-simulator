@@ -235,6 +235,73 @@ pub fn encode_eight_blocks(pieces: &[Vec<u8>], id: &[u8], index: usize) -> Vec<V
     encodings
 }
 
+/// Encodes a single block at a time for a single source piece on a single core, using instruction-level parallelism, while iterating a starting index to obtain unique encodings
+pub fn encode_eight_blocks_single_piece(piece: &[u8], id: &[u8], index: usize) -> Vec<Vec<u8>> {
+  // setup the cipher
+  const PIECES_PER_ROUND: usize = 8;
+  let mut ivs: Vec<[u8; 16]> = Vec::new();
+  for i in 0..PIECES_PER_ROUND {
+      ivs.push(utils::usize_to_bytes(index + i));
+  }
+  let key = GenericArray::from_slice(id);
+  let mut seed_block = GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
+  let mut block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
+  let cipher = Aes256::new(&key);
+  let mut encodings: Vec<Vec<u8>> = Vec::new();
+  for _ in 0..PIECES_PER_ROUND {
+      let encoding: Vec<u8> = Vec::with_capacity(4096);
+      encodings.push(encoding);
+  }
+  let mut block_offset = 0;
+
+  // xor iv with source block
+  for piece_index in 0..PIECES_PER_ROUND {
+      for byte in 0..crate::BLOCK_SIZE {
+          block8[piece_index][byte] ^= ivs[piece_index][byte];
+      }
+  }
+
+  // apply Rijndael cipher for specified rounds
+  for _ in 0..crate::ROUNDS {
+      cipher.encrypt_blocks(&mut block8);
+  }
+
+  // append each block to encoding in encoding vec
+  for piece_index in 0..PIECES_PER_ROUND {
+      encodings[piece_index].extend_from_slice(&block8[piece_index]);
+  }
+
+  block_offset += crate::BLOCK_SIZE;
+
+  for _ in 1..crate::BLOCKS_PER_PIECE {
+      // load the blocks at the same index across all pieces into block8
+      let next_block_offset = block_offset + crate::BLOCK_SIZE;
+      seed_block = GenericArray::clone_from_slice(&piece[block_offset..next_block_offset]);
+      block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
+
+      // xor feedback with source block
+      let previous_block_offset = block_offset - crate::BLOCK_SIZE;
+      for piece_index in 0..PIECES_PER_ROUND {
+          for byte in 0..crate::BLOCK_SIZE {
+              block8[piece_index][byte] ^= encodings[piece_index][previous_block_offset + byte];
+          }
+      }
+
+      // apply Rijndael cipher for specified rounds
+      for _ in 0..crate::ROUNDS {
+          cipher.encrypt_blocks(&mut block8);
+      }
+
+      // append each block to encoding in encoding vec
+      for piece_index in 0..PIECES_PER_ROUND {
+          encodings[piece_index].extend_from_slice(&block8[piece_index]);
+      }
+
+      block_offset += crate::BLOCK_SIZE;
+  }
+  encodings
+}
+
 /// Decodes eight blocks at a time for a single piece, using instruction-level parallelism, on a single core
 pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Vec<u8> {
     // setup the cipher
@@ -341,4 +408,17 @@ pub fn encode_eight_blocks_in_parallel(pieces: &[Vec<u8>], id: &[u8]) -> Vec<Vec
         .map(|(chunk, pieces)| encode_eight_blocks(pieces, id, chunk * 8))
         .flatten()
         .collect()
+}
+
+/// encodes a single block at a time for a single source piece (replicated for simplicity) on multiple cores, using instruction level parallelism, while iterating a starting index to obtain unique encodings
+/// current batch size is 64, assuming a max of 8 cores with 8 pieces per core
+pub fn encode_eight_blocks_in_parallel_single_piece(pieces: &[Vec<u8>], id: &[u8], index: usize) -> Vec<Vec<u8>> {
+    pieces
+      .par_iter()
+      .enumerate()
+      .map(
+        |(piece_index, piece)| 
+        encode_eight_blocks_single_piece(piece, &id, index + piece_index * 8))
+      .flatten()
+      .collect()
 }

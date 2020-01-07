@@ -35,12 +35,14 @@ pub const ROUNDS: usize = 2048;
     // use single piece with parallel core encoding of eight blocks
     // take in plot location (drive) from CLI args
     // measure plotting on 1 MB, 100 MB, 1 GB, 100 GB, 1 TB iteratively
+    // measure solve time as plot gets larger
   // Extend with ledger
   // Extend with network
   // Test with Docker
 
 fn main() {
   benchmarks::run();
+  // simulator();
 }
 
 fn simulator() {
