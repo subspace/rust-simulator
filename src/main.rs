@@ -25,7 +25,7 @@ pub const PLOT_SIZES: [usize; 4] = [
 pub const ROUNDS: usize = 2048;
 pub const PIECES_PER_BATCH: usize = 8;
 pub const PIECES_PER_GROUP: usize = 64;
-pub const CHALLENGE_EVALUATIONS: usize = 8000;
+pub const CHALLENGE_EVALUATIONS: usize = 16_000;
 
 // TODO
   // Correct/Optimize Encodings
@@ -130,12 +130,12 @@ fn simulator(plot_size: usize) {
         // println!("{}", encoding.len());
     }
 
-    let total_plot_time = plot_time.elapsed().as_nanos();
-    let average_plot_time = (total_plot_time / piece_count as u128) as f32 / (1000f32 * 1000f32);
+    let total_plot_time = plot_time.elapsed();
+    let average_plot_time = (total_plot_time.as_nanos() / piece_count as u128) as f32 / (1000f32 * 1000f32);
 
     println!("Average plot time is {:.3} ms per piece", average_plot_time);
-    println!("Total plot time is {:.3} hours", total_plot_time as f32 / (1000f32 * 1000f32 * 1000f32 * 60f32 * 60f32));
-    println!("Throughput is {} mb / sec", (plot_size / 1000 * 1000) as f32 / (total_plot_time as f32 / (1000f32 * 1000f32 * 1000f32)));
+    println!("Total plot time is {:.3} minutes", total_plot_time.as_secs_f32() / 60f32);
+    println!("Plotting throughput is {} mb / sec", (plot_size / (1000 * 1000)) as f32 / (total_plot_time.as_secs_f32()));
     println!("Solving, proving, and verifying challenges ...", );
     let evaluate_time = Instant::now();
 
