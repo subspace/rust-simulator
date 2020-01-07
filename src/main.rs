@@ -45,11 +45,10 @@ pub const CHALLENGE_EVALUATIONS: usize = 16_000;
   // Test with Docker
 
 fn main() {
-  // benchmarks::run();
+  benchmarks::run();
   for plot_size in PLOT_SIZES.iter() {
     simulator(*plot_size);
   }
-  
 }
 
 fn simulator(plot_size: usize) {
