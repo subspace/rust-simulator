@@ -6,13 +6,13 @@ use std::collections::HashMap;
 
 pub struct Plot {
     path: String,
-    size: u64,
+    size: usize,
     file: File,
     map: HashMap<usize, usize>
 }
 
 impl Plot {
-    pub fn new(path: String, size: u64) -> Plot {
+    pub fn new(path: String, size: usize) -> Plot {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
