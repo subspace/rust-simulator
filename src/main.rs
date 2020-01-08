@@ -15,7 +15,7 @@ pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
 pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
-pub const PLOT_SIZES: [usize; 4] = [
+pub const PLOT_SIZES: [u64; 4] = [
     1_048_576,        // 1 MB
     104_857_600,      // 100 MB
     1_073_741_824,     // 1 GB
@@ -29,20 +29,25 @@ pub const CHALLENGE_EVALUATIONS: usize = 16_000;
 
 // TODO
   // Correct/Optimize Encodings
+    // derive optimal secure encoding function 
     // use SIMD register and AES-NI explicitly
       // use registers for hardware XOR operations
       // use register to set the number of blocks to encode/decode in parallel
       // use registers to simplify Rijndael (no key expansion)
-    // compile to assembly to check when main memory is called in encode
-    // compile to assembly to check for optimal iterator usage
-    // switch to Little Endian binary encoding and see if any change
+    // compile to assembly and review code
+      // when is main memory called?
+      // are we using iterators optimally?
+      // any change for switching to Little Endian binary encoding
     // disable hyper threading to see if there is any change
-  // Test Plotting
-    // measure plotting on 1 MB, 100 MB, 1 GB, 100 GB, 1 TB iteratively
-    // measure solve time as plot gets larger
+    // write parallel decoding on shared piece object
+    // refactor to use constant sized arrays throughout
+    // find most efficient software implementation
+    // accelerate with a GPU
+    // accelerate with ARM crypto extensions 
+
   // Extend with ledger
   // Extend with network
-  // Test with Docker
+  // Test with Docker on AWS
 
 fn main() {
   benchmarks::run();
@@ -51,8 +56,8 @@ fn main() {
   }
 }
 
-fn simulator(plot_size: usize) {
-    println!("Running simulation for {} GB plot with {} challenge evaluations", plot_size as f32 / (1000f32 * 1000f32 * 1000f32), CHALLENGE_EVALUATIONS);
+fn simulator(plot_size: u64) {
+    println!("\nRunning simulation for {} GB plot with {} challenge evaluations", plot_size as f32 / (1000f32 * 1000f32 * 1000f32), CHALLENGE_EVALUATIONS);
 
     // create random genesis piece
     let genesis_piece = crypto::random_bytes(4096);
@@ -106,7 +111,7 @@ fn simulator(plot_size: usize) {
         .collect();
 
     // plot pieces in groups of 64 divided into batches of 8. Each batch is encoded concurrently on the same core using instruction level parallelism, while all batches (the group) are encoded concurrently across different cores.
-    let piece_count: usize = plot_size / PIECE_SIZE;
+    let piece_count: usize = (plot_size / (PIECE_SIZE as u64)) as usize;
     for group_index in 0..(piece_count / PIECES_PER_GROUP) {
         crypto::encode_eight_blocks_in_parallel_single_piece(&pieces, &id, group_index * PIECES_PER_GROUP)
           .iter()
@@ -162,7 +167,7 @@ fn simulator(plot_size: usize) {
         (evaluate_time.elapsed().as_nanos() / CHALLENGE_EVALUATIONS as u128) as f32 / (1000f32 * 1000f32);
 
     println!(
-        "Average evaluation time is {:.3} ms per piece\n",
+        "Average evaluation time is {:.3} ms per piece",
         average_evaluate_time
     );
 }
