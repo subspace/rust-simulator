@@ -128,7 +128,7 @@ fn simulator(plot_size: usize) {
 
     println!("Average plot time is {:.3} ms per piece", average_plot_time);
     println!("Total plot time is {:.3} minutes", total_plot_time.as_secs_f32() / 60f32);
-    println!("Plotting throughput is {} mb / sec", (plot_size / (1000 * 1000)) as f32 / (total_plot_time.as_secs_f32()));
+    println!("Plotting throughput is {} mb / sec", ((plot_size as u64 * PIECE_SIZE as u64) / (1000 * 1000)) as f32 / (total_plot_time.as_secs_f32()));
     println!("Solving, proving, and verifying challenges ...", );
     let evaluate_time = Instant::now();
 
