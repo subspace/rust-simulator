@@ -9,8 +9,8 @@ use byteorder::WriteBytesExt;
 use ed25519_dalek;
 use ed25519_dalek::Keypair;
 use rand;
-use rand::rngs::OsRng;
 use rand::Rng;
+use rand::rngs::OsRng;
 use rayon::prelude::*;
 use ring;
 use ring::{digest, hmac};
@@ -29,6 +29,21 @@ pub fn random_bytes_32() -> [u8; 32] {
   let mut bytes = [0u8; 32];
   rand::thread_rng().fill(&mut bytes[..]);
   bytes
+}
+
+pub fn genesis_piece_from_seed(seed: &str) -> [u8; 4096] {
+  let mut piece = [0u8; 4096];
+  let mut input: [u8; 32] = [0u8; 32];
+  input.copy_from_slice(seed.as_bytes());
+  let mut block_offset = 0;
+  for _ in 0..128 {
+    input = digest_sha_256(&input);
+    for byte in 0..32 {
+      piece[byte + block_offset] = input[byte];
+    }
+    block_offset += 32;
+  }
+  piece
 }
 
 pub fn gen_keys() -> ed25519_dalek::Keypair {

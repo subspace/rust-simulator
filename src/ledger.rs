@@ -1,7 +1,10 @@
-// use std::collections::HashMap;
-// use std::time::{SystemTime, UNIX_EPOCH};
-// use super::spv::{ Proof };
+use super::spv::{ Proof };
+use super::crypto;
 
+use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
+use serde::{Serialize, Deserialize};
+use bincode;
 
 /*
   Iterations
@@ -10,19 +13,13 @@
     3. Multiple Chains / Multiple Farmers 
 */
 
-// block struct
-// chain struct
-// ledger struct
-// balances map
-
-// start with ledger running on a single node
 // genesis challenge will be hash of genesis piece 
-// must derive genesis piece deterministically 
 
 // track all chains
 // extend a chain
 // update balances
 
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 struct Block {
   parent_id: [u8; 32],
   child_count: u8,
@@ -30,9 +27,43 @@ struct Block {
   height: u32,
   tag: [u8; 32],
   public_key: [u8; 32],
-  signature: [u8; 64],
+  signature: Vec<u8>,
   reward: u32,
-  payload: [u8; 4096],
+  tx_payload: Vec<u8>,
+}
+
+impl Block {
+  pub fn new(proof: Proof, height: u32, tx_payload: Vec<u8>) -> Block {
+
+    let timestamp = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .expect("Time went backwards")
+      .as_millis();
+  
+    Block {
+      parent_id: proof.challenge,
+      child_count: 0,
+      timestamp,
+      height,
+      tag: proof.tag,
+      public_key: proof.public_key,
+      signature: proof.signature.to_vec(),
+      reward: 1,
+      tx_payload,
+    }
+  }
+
+  pub fn to_bytes(&self) -> Vec<u8> {
+    bincode::serialize(self).unwrap()
+  }
+
+  pub fn from_bytes(bytes: &[u8]) -> Block {
+    bincode::deserialize(bytes).unwrap()
+  }
+
+  pub fn get_id(&self) -> [u8; 32] {
+    crypto::digest_sha_256(&self.to_bytes()[..])
+  }
 }
 
 struct AuxillaryData {
@@ -41,22 +72,6 @@ struct AuxillaryData {
   piece_index: u32,
 }
 
-// impl Block {
-//   pub fn new(proof: Proof) -> Block {
-
-//     let timestamp = SystemTime::now()
-//       .duration_since(UNIX_EPOCH)
-//       .expect("Time went backwards")
-//       .as_millis();
-  
-//     Block {
-//       parent_id: proof.challenge
-//     }
-
-//   }
-// }
-
-// let balances: HashMap<[u8; 32], usize> = HashMap::new();
 // // update balance
 // // get balance
 
@@ -67,8 +82,10 @@ struct AuxillaryData {
     // quality
     // 
 
-// fn start() {
-//   let mut chain: Vec<Block> = Vec::new();
-// }
+fn start() {
+  let balances: HashMap<[u8; 32], usize> = HashMap::new();
+  let mut chain: Vec<Block> = Vec::new();
+
+}
 
 

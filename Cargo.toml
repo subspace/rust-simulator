@@ -20,6 +20,8 @@ num-traits = "0.2.10"
 bitintr = "0.3.0"
 merkle = "1.11.0"
 hex = "0.4.0"
+serde = { version = "1.0.104", features = ["derive"] }
+bincode = "1.2.1"
 
 [profile]
 [profile.release]

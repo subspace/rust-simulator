@@ -30,7 +30,7 @@ pub const CHALLENGE_EVALUATIONS: usize = 16_000;
 
 // TODO
   // Correct/Optimize Encodings
-    // derive optimal secure encoding function 
+    // derive optimal secure encoding algorithm 
     // use SIMD register and AES-NI explicitly
       // use registers for hardware XOR operations
       // use register to set the number of blocks to encode/decode in parallel
