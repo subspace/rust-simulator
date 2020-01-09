@@ -4,6 +4,7 @@ mod crypto;
 mod plotter;
 mod spv;
 mod utils;
+mod ledger;
 
 use merkle::{ self, MerkleTree };
 use ring::digest::{Algorithm, SHA512};
@@ -40,7 +41,6 @@ pub const CHALLENGE_EVALUATIONS: usize = 16_000;
       // any change for switching to Little Endian binary encoding
     // disable hyper threading to see if there is any change
     // write parallel decoding on shared piece object
-    // refactor to use constant sized arrays throughout
     // find most efficient software implementation
     // accelerate with a GPU
     // accelerate with ARM crypto extensions 
@@ -60,7 +60,7 @@ fn simulator(plot_size: usize) {
     println!("\nRunning simulation for {} GB plot with {} challenge evaluations", (plot_size * PIECE_SIZE) as f32 / (1000f32 * 1000f32 * 1000f32), CHALLENGE_EVALUATIONS);
 
     // create random genesis piece
-    let genesis_piece = crypto::random_bytes(4096);
+    let genesis_piece = crypto::random_bytes_4096();
     let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
     println!("Created genesis piece");
 
@@ -106,7 +106,7 @@ fn simulator(plot_size: usize) {
     let mut plot = plotter::Plot::new(path, plot_size);
     
     let plot_time = Instant::now();
-    let pieces: Vec<Vec<u8>> = (0..PIECES_PER_BATCH)
+    let pieces: Vec<[u8; PIECE_SIZE]> = (0..PIECES_PER_BATCH)
         .map(|_| genesis_piece.clone())
         .collect();
 
@@ -133,12 +133,12 @@ fn simulator(plot_size: usize) {
     let evaluate_time = Instant::now();
 
     // start evaluation loop
-    let mut challenge = crypto::random_bytes(32);
+    let mut challenge = crypto::random_bytes_32();
     let quality_threshold = 0;
     for _ in 0..CHALLENGE_EVALUATIONS {
         let solution = spv::solve(&challenge, plot_size, &mut plot);
         if solution.quality >= quality_threshold {
-            let proof = spv::prove(&challenge, &solution, &keys);
+            let proof = spv::prove(challenge, &solution, &keys);
             spv::verify(proof, plot_size, &genesis_piece_hash);
             let mut merkle_index = solution.index % 256;
             if merkle_index == 255 {

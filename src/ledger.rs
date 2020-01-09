@@ -1,4 +1,8 @@
-use std::collections::HashMap;
+// use std::collections::HashMap;
+// use std::time::{SystemTime, UNIX_EPOCH};
+// use super::spv::{ Proof };
+
+
 /*
   Iterations
     1. Single Chain / Single Farmer
@@ -20,22 +24,51 @@ use std::collections::HashMap;
 // update balances
 
 struct Block {
-  previous_block: [u8; 32],
-  encoding_tag: [u8; 32], 
-  signature: [u8; 64],
+  parent_id: [u8; 32],
+  child_count: u8,
+  timestamp: u128, 
+  height: u32,
+  tag: [u8; 32],
   public_key: [u8; 32],
-  reward: usize,
+  signature: [u8; 64],
+  reward: u32,
+  payload: [u8; 4096],
 }
 
-impl Block {
-  pub fn new(proof) {
-
-  }
+struct AuxillaryData {
+  encoding: [u8; 4096],
+  merkle_proof: [u8; 256],
+  piece_index: u32,
 }
 
-let balances: HashMap<[u8; 32], usize> = HashMap::new();
-// update balance
-// get balance
+// impl Block {
+//   pub fn new(proof: Proof) -> Block {
 
-let mut chain: Vec<Block> = Vec::new();
+//     let timestamp = SystemTime::now()
+//       .duration_since(UNIX_EPOCH)
+//       .expect("Time went backwards")
+//       .as_millis();
+  
+//     Block {
+//       parent_id: proof.challenge
+//     }
+
+//   }
+// }
+
+// let balances: HashMap<[u8; 32], usize> = HashMap::new();
+// // update balance
+// // get balance
+
+// chain
+  // blocks
+  // heads
+    // height
+    // quality
+    // 
+
+// fn start() {
+//   let mut chain: Vec<Block> = Vec::new();
+// }
+
 

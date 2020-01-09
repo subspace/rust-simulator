@@ -32,7 +32,7 @@ impl Plot {
         }
     }
 
-    pub fn add(&mut self, encoding: &[u8], index: usize) {
+    pub fn add(&mut self, encoding: &[u8; crate::PIECE_SIZE], index: usize) {
         let position = self.file
             .seek(SeekFrom::Current(0))
             .unwrap();
@@ -42,16 +42,15 @@ impl Plot {
         self.map.insert(index, position as usize);
     }
 
-    pub fn get(&mut self, index: usize) -> Vec<u8> {
+    pub fn get(&mut self, index: usize) -> [u8; crate::PIECE_SIZE] {
         let position = self.map.get(&index).unwrap();
         self.file
             .seek(SeekFrom::Start(*position as u64))
             .unwrap();
         let mut buffer = [0u8; 4096];
         self.file.read_exact(&mut buffer).unwrap();
-        let encoding = buffer.to_vec();
+        buffer
         // let encoding_hash = crypto::digest_sha_256(&encoding);
         // println!("Retrieving encoding with hash {} at index {} from position {}", hex::encode(encoding_hash.to_vec()), index, position);
-        encoding
     }
 }

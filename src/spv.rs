@@ -7,9 +7,9 @@ use ed25519_dalek::{Keypair, PublicKey, Signature};
 
 pub struct Solution {
     pub index: u64,
-    pub tag: Vec<u8>,
+    pub tag: [u8; 32],
     pub quality: u8,
-    pub encoding: Vec<u8>,
+    pub encoding: [u8; 4096],
 }
 
 pub fn solve(challenge: &[u8], piece_count: usize, plot: &mut plotter::Plot) -> Solution {
@@ -29,19 +29,19 @@ pub fn solve(challenge: &[u8], piece_count: usize, plot: &mut plotter::Plot) -> 
 }
 
 pub struct Proof {
-    pub challenge: Vec<u8>,
+    pub challenge: [u8; 32],
     pub public_key: [u8; 32],
-    pub tag: Vec<u8>,
+    pub tag: [u8; 32],
     pub signature: [u8; 64],
     // merkle_proof: [u8; 256],
-    pub encoding: Vec<u8>,
+    pub encoding: [u8; 4096],
 }
 
-pub fn prove(challenge: &[u8], solution: &Solution, keys: &Keypair) -> Proof {
+pub fn prove(challenge: [u8; 32], solution: &Solution, keys: &Keypair) -> Proof {
     let signature = keys.sign(&solution.tag).to_bytes();
 
     Proof {
-        challenge: challenge.to_vec(),
+        challenge: challenge,
         public_key: keys.public.to_bytes(),
         tag: solution.tag.clone(),
         signature,
@@ -66,7 +66,7 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bo
 
     // verify decoding matches genesis piece
     let id = crypto::digest_sha_256(&proof.public_key);
-    let decoding = crypto::decode_eight_blocks(&proof.encoding[0..4096], &id[0..32], index);
+    let decoding = crypto::decode_eight_blocks(&proof.encoding, &id[0..32], index);
     let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
     if !utils::are_arrays_equal(&genesis_piece_hash[0..32], &decoding_hash[0..32]) {
         println!("Invalid proof, encoding is invalid");
