@@ -8,7 +8,7 @@ pub struct Plot {
     path: String,
     size: usize,
     file: File,
-    map: HashMap<usize, usize>
+    map: HashMap<usize, u64>
 }
 
 impl Plot {
@@ -22,7 +22,7 @@ impl Plot {
         
         // file.set_len(size as u64).unwrap();
 
-        let map: HashMap<usize, usize> = HashMap::new();
+        let map: HashMap<usize, u64> = HashMap::new();
 
         Plot {
             path: String::from(&path),
@@ -39,13 +39,13 @@ impl Plot {
         // let encoding_hash = crypto::digest_sha_256(&encoding);
         // println!("Added encoding with hash {} at position {} for index {}", hex::encode(encoding_hash.to_vec()), position, index);
         self.file.write_all(&encoding[0..4096]).unwrap();
-        self.map.insert(index, position as usize);
+        self.map.insert(index, position);
     }
 
     pub fn get(&mut self, index: usize) -> [u8; crate::PIECE_SIZE] {
         let position = self.map.get(&index).unwrap();
         self.file
-            .seek(SeekFrom::Start(*position as u64))
+            .seek(SeekFrom::Start(*position))
             .unwrap();
         let mut buffer = [0u8; 4096];
         self.file.read_exact(&mut buffer).unwrap();
