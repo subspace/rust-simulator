@@ -83,8 +83,8 @@ struct AuxillaryData {
     // 
 
 fn start() {
-  let balances: HashMap<[u8; 32], usize> = HashMap::new();
-  let mut chain: Vec<Block> = Vec::new();
+  let _balances: HashMap<[u8; 32], usize> = HashMap::new();
+  let mut _chain: Vec<Block> = Vec::new();
 
 }
 
