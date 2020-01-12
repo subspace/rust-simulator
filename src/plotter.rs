@@ -1,3 +1,4 @@
+use crate::Piece;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
@@ -32,7 +33,7 @@ impl Plot {
         }
     }
 
-    pub fn add(&mut self, encoding: &[u8; crate::PIECE_SIZE], index: usize) {
+    pub fn add(&mut self, encoding: &Piece, index: usize) {
         let position = self.file.seek(SeekFrom::Current(0)).unwrap();
         // let encoding_hash = crypto::digest_sha_256(&encoding);
         // println!("Added encoding with hash {} at position {} for index {}", hex::encode(encoding_hash.to_vec()), position, index);
@@ -40,7 +41,7 @@ impl Plot {
         self.map.insert(index, position);
     }
 
-    pub fn get(&mut self, index: usize) -> [u8; crate::PIECE_SIZE] {
+    pub fn get(&mut self, index: usize) -> Piece {
         let position = self.map.get(&index).unwrap();
         self.file.seek(SeekFrom::Start(*position)).unwrap();
         let mut buffer = [0u8; 4096];

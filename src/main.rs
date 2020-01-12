@@ -28,6 +28,8 @@ pub const PIECES_PER_BATCH: usize = 8;
 pub const PIECES_PER_GROUP: usize = 64;
 pub const CHALLENGE_EVALUATIONS: usize = 16_000;
 
+pub type Piece = [u8; crate::PIECE_SIZE];
+
 // TODO
 // Correct/Optimize Encodings
 // derive optimal secure encoding algorithm
