@@ -56,7 +56,6 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bo
 
     // println!("Verify index is {}", index);
 
-
     // is tag correct
     let tag = crypto::create_hmac(&proof.encoding[0..4096], &proof.challenge);
     if !utils::are_arrays_equal(&tag, &proof.tag) {

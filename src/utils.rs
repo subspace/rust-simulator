@@ -112,4 +112,3 @@ pub fn mode(numbers: &[u128]) -> u128 {
         .map(|(val, _)| val)
         .expect("Cannot compute the mode of zero numbers")
 }
-
