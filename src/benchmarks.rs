@@ -14,10 +14,10 @@ pub fn run() {
     let index: usize = 2_342_345_234;
 
     // generate and collect a unique piece for each test
-    let pieces: Vec<[u8; 4096]> = (0..tests).map(|_| crypto::random_bytes_4096()).collect();
+    let pieces: Vec<Piece> = (0..tests).map(|_| crypto::random_bytes_4096()).collect();
 
     // encode and collect a unique encoding for each test
-    let encodings: Vec<[u8; 4096]> = pieces
+    let encodings: Vec<Piece> = pieces
         .iter()
         .enumerate()
         .map(|(i, piece)| crypto::encode_single_block(piece, &key, i))

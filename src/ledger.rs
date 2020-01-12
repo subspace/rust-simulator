@@ -1,6 +1,7 @@
 use super::crypto;
 use super::spv::Proof;
 
+use crate::Piece;
 use bincode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -66,7 +67,7 @@ impl Block {
 }
 
 struct AuxillaryData {
-    encoding: [u8; 4096],
+    encoding: Piece,
     merkle_proof: [u8; 256],
     piece_index: u32,
 }

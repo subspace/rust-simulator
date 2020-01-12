@@ -20,7 +20,7 @@ const ROUNDS: usize = 1;
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 
-pub fn random_bytes_4096() -> [u8; 4096] {
+pub fn random_bytes_4096() -> Piece {
     let mut bytes = [0u8; 4096];
     rand::thread_rng().fill(&mut bytes[..]);
     bytes
@@ -32,7 +32,7 @@ pub fn random_bytes_32() -> [u8; 32] {
     bytes
 }
 
-pub fn genesis_piece_from_seed(seed: &str) -> [u8; 4096] {
+pub fn genesis_piece_from_seed(seed: &str) -> Piece {
     let mut piece = [0u8; 4096];
     let mut input: [u8; 32] = [0u8; 32];
     input.copy_from_slice(seed.as_bytes());
