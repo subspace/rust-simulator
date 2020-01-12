@@ -49,8 +49,22 @@ pub fn run() {
     test_decode_speed(
         &encodings,
         &key,
+        "single block, multi core",
+        test_decoding_speed_single_block_parallel,
+    );
+
+    test_decode_speed(
+        &encodings,
+        &key,
         "eight blocks, single core",
         test_decoding_speed_eight_blocks,
+    );
+
+    test_decode_speed(
+        &encodings,
+        &key,
+        "eight blocks, multi core",
+        test_decoding_speed_eight_blocks_parallel,
     );
 
     // single decoding parallel
@@ -191,6 +205,18 @@ fn test_decoding_speed_single_block(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u
     decode_times
 }
 
+// decoding single block in parallel
+fn test_decoding_speed_single_block_parallel(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+    let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
+    for (i, encoding) in encodings.iter().enumerate() {
+        let start_time = Instant::now();
+        crypto::decode_single_block_parallel(&encoding, &key, i);
+        let decode_time = start_time.elapsed().as_nanos();
+        decode_times.push(decode_time);
+    }
+    decode_times
+}
+
 // decoding eight blocks
 fn test_decoding_speed_eight_blocks(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
     let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
@@ -203,9 +229,17 @@ fn test_decoding_speed_eight_blocks(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u
     decode_times
 }
 
-// decode single block in parallel
-
-// decoding eight blocks parallel
+// decoding eight blocks in parallel
+fn test_decoding_speed_eight_blocks_parallel(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+    let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
+    for (i, encoding) in encodings.iter().enumerate() {
+        let start_time = Instant::now();
+        crypto::decode_eight_blocks_parallel(&encoding, &key, i);
+        let decode_time = start_time.elapsed().as_nanos();
+        decode_times.push(decode_time);
+    }
+    decode_times
+}
 
 // Generic encoding throughput test
 pub fn test_encode_throughput(
@@ -279,6 +313,16 @@ fn validate_encoding() {
         }
     }
 
+    let simple_decoding = crypto::decode_single_block_parallel(&simple_encoding, &key, index);
+    let simple_decoding_hash = crypto::digest_sha_256(&simple_decoding);
+    match piece_hash.cmp(&simple_decoding_hash) {
+        Ordering::Equal => println!("Success! -- Simple parallel decoding matches piece"),
+        _ => {
+            println!("Failure! -- Simple parallel decoding does not match piece\n");
+            utils::compare_bytes(&piece, &simple_encoding, &simple_decoding);
+        }
+    }
+
     // does 8 blocks decoding match piece?
     let eight_blocks_decoding = crypto::decode_eight_blocks(&simple_encoding, &key, index);
     let eight_blocks_decoding_hash = crypto::digest_sha_256(&eight_blocks_decoding);
@@ -286,6 +330,16 @@ fn validate_encoding() {
         Ordering::Equal => println!("Success! -- 8 blocks decoding matches piece"),
         _ => {
             println!("Failure! -- 8 blocks decoding does not match piece\n");
+            utils::compare_bytes(&piece, &simple_encoding, &eight_blocks_decoding);
+        }
+    }
+
+    let eight_blocks_decoding = crypto::decode_eight_blocks_parallel(&simple_encoding, &key, index);
+    let eight_blocks_decoding_hash = crypto::digest_sha_256(&eight_blocks_decoding);
+    match piece_hash.cmp(&eight_blocks_decoding_hash) {
+        Ordering::Equal => println!("Success! -- 8 blocks parallel decoding matches piece"),
+        _ => {
+            println!("Failure! -- 8 blocks parallel decoding does not match piece\n");
             utils::compare_bytes(&piece, &simple_encoding, &eight_blocks_decoding);
         }
     }

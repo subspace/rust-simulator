@@ -7,6 +7,7 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
+use crossbeam_utils::thread;
 use ed25519_dalek;
 use ed25519_dalek::Keypair;
 use rand;
@@ -192,6 +193,60 @@ pub fn decode_single_block(encoding: &Piece, id: &[u8], index: usize) -> Piece {
 
         block_offset += crate::BLOCK_SIZE;
     }
+    piece
+}
+
+/// Decodes one block at a time for a single piece on a multiple cores
+pub fn decode_single_block_parallel(encoding: &Piece, id: &[u8], index: usize) -> Piece {
+    // setup the cipher
+    let iv = utils::usize_to_bytes(index);
+    let key = GenericArray::from_slice(id);
+    let mut piece: Piece = [0u8; crate::PIECE_SIZE];
+    let cipher = Aes256::new(&key);
+
+    let mut block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
+
+    // apply inverse Rijndael cipher to each encoded block
+    for _ in 0..crate::ROUNDS {
+        cipher.decrypt_block(&mut block);
+    }
+
+    for i in 0..crate::BLOCK_SIZE {
+        block[i] ^= iv[i];
+    }
+
+    // copy block into encoding
+    for i in 0..crate::BLOCK_SIZE {
+        piece[i] = block[i];
+    }
+
+    thread::scope(|s| {
+        for (i, piece_block) in piece.chunks_mut(crate::BLOCK_SIZE).enumerate().skip(1) {
+            let block_offset = i * crate::BLOCK_SIZE;
+            s.spawn(move |_| {
+                let mut block = GenericArray::clone_from_slice(
+                    &encoding[block_offset..block_offset + crate::BLOCK_SIZE],
+                );
+
+                // apply inverse Rijndael cipher to each encoded block
+                for _ in 0..crate::ROUNDS {
+                    cipher.decrypt_block(&mut block);
+                }
+
+                // xor with iv or previous encoded block to retrieve source block
+                let previous_block_offset = block_offset - crate::BLOCK_SIZE;
+                for i in 0..crate::BLOCK_SIZE {
+                    block[i] ^= encoding[previous_block_offset + i];
+                }
+
+                // copy block into encoding
+                for i in 0..crate::BLOCK_SIZE {
+                    piece_block[i] = block[i];
+                }
+            });
+        }
+    })
+    .unwrap();
     piece
 }
 
@@ -442,6 +497,105 @@ pub fn decode_eight_blocks(encoding: &Piece, id: &[u8], index: usize) -> Piece {
             }
         }
     }
+    piece
+}
+
+/// Decodes eight blocks at a time for a single piece, using instruction-level parallelism, on a multiple cores
+pub fn decode_eight_blocks_parallel(encoding: &Piece, id: &[u8], index: usize) -> Piece {
+    // setup the cipher
+    const BATCH_SIZE: usize = 8;
+    let iv = utils::usize_to_bytes(index);
+    let key = GenericArray::from_slice(id);
+    let block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
+    let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
+    let mut piece: Piece = [0u8; crate::PIECE_SIZE];
+    let cipher = Aes256::new(&key);
+    let mut block_offset = 0;
+
+    // 32 by default
+    // load first eight blocks
+
+    let mut block_in_batch_offset = 0;
+    for block in 0..BATCH_SIZE {
+        // 8 by default
+        block8[block] = GenericArray::clone_from_slice(
+            &encoding[block_in_batch_offset..block_in_batch_offset + crate::BLOCK_SIZE],
+        );
+        block_in_batch_offset += crate::BLOCK_SIZE;
+    }
+
+    // decrypt first eight blocks
+    for _ in 0..crate::ROUNDS {
+        // 24 rounds by default
+        cipher.decrypt_blocks(&mut block8);
+    }
+
+    // decode first block of first batch with IV
+    for (byte, iv_item) in iv.iter().enumerate() {
+        block8[0][byte] ^= *iv_item;
+    }
+
+    // decode remaining seven blocks in first batch with the previous block
+    for block in 1..BATCH_SIZE {
+        for byte in 0..crate::BLOCK_SIZE {
+            block8[block][byte] ^= encoding[block_offset + byte];
+        }
+        block_offset += crate::BLOCK_SIZE;
+    }
+
+    // copy first eight blocks
+    for block in 0..BATCH_SIZE {
+        // 8 by default
+        for byte in 0..crate::BLOCK_SIZE {
+            piece[block * crate::BLOCK_SIZE + byte] = block8[block][byte];
+        }
+    }
+
+    // decode remaining batches
+    thread::scope(|s| {
+        for (batch, piece_block) in piece
+            .chunks_mut(BATCH_SIZE * crate::BLOCK_SIZE)
+            .enumerate()
+            .skip(1)
+        {
+            // 32 by default
+            // load blocks
+            let batch_start = batch * BATCH_SIZE * crate::BLOCK_SIZE;
+            block_in_batch_offset = 0;
+            for block in 0..BATCH_SIZE {
+                // 8 by default
+                block8[block] = GenericArray::clone_from_slice(
+                    &encoding[batch_start + block_in_batch_offset
+                        ..batch_start + block_in_batch_offset + crate::BLOCK_SIZE],
+                );
+                block_in_batch_offset += crate::BLOCK_SIZE;
+            }
+
+            // decrypt blocks
+            for _ in 0..crate::ROUNDS {
+                // 24 rounds by default
+                cipher.decrypt_blocks(&mut block8);
+            }
+
+            // xor blocks
+            for block in 0..BATCH_SIZE {
+                for byte in 0..crate::BLOCK_SIZE {
+                    block8[block][byte] ^= encoding[block_offset + byte];
+                }
+                block_offset += crate::BLOCK_SIZE;
+            }
+
+            // copy blocks
+            for block in 0..BATCH_SIZE {
+                // 8 by default
+                for byte in 0..crate::BLOCK_SIZE {
+                    let piece_index = (block * crate::BLOCK_SIZE) + byte;
+                    piece_block[piece_index] = block8[block][byte]
+                }
+            }
+        }
+    })
+    .unwrap();
     piece
 }
 
