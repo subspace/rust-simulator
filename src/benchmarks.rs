@@ -82,7 +82,9 @@ pub fn run() {
         &key,
         index,
         "single block, parallel cores",
-        test_encoding_throughput_parallel_single_block,
+        |pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], _index: usize| {
+            crypto::encode_single_block_in_parallel(pieces, key);
+        },
     );
 
     test_encode_throughput(
@@ -90,7 +92,9 @@ pub fn run() {
         &key,
         index,
         "eight blocks, parallel cores",
-        test_encoding_throughput_parallel_eight_blocks,
+        |pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], _index: usize| {
+            crypto::encode_eight_blocks_in_parallel(pieces, key);
+        },
     );
 
     test_encode_throughput(
@@ -248,22 +252,6 @@ fn test_encoding_throughput_eight_blocks(
     for (chunk, pieces) in pieces.chunks(chunk_size).enumerate() {
         crypto::encode_eight_blocks(pieces, key, chunk * chunk_size);
     }
-}
-
-fn test_encoding_throughput_parallel_single_block(
-    pieces: &Vec<[u8; crate::PIECE_SIZE]>,
-    key: &[u8],
-    _index: usize,
-) {
-    crypto::encode_single_block_in_parallel(pieces, key);
-}
-
-fn test_encoding_throughput_parallel_eight_blocks(
-    pieces: &Vec<[u8; crate::PIECE_SIZE]>,
-    key: &[u8],
-    _index: usize,
-) {
-    crypto::encode_eight_blocks_in_parallel(pieces, key);
 }
 
 fn test_encoding_throughput_eight_blocks_single_piece(
