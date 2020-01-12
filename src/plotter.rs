@@ -44,7 +44,7 @@ impl Plot {
     pub fn get(&mut self, index: usize) -> Piece {
         let position = self.map.get(&index).unwrap();
         self.file.seek(SeekFrom::Start(*position)).unwrap();
-        let mut buffer = [0u8; 4096];
+        let mut buffer = [0u8; crate::PIECE_SIZE];
         self.file.read_exact(&mut buffer).unwrap();
         buffer
         // let encoding_hash = crypto::digest_sha_256(&encoding);
