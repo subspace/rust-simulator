@@ -561,38 +561,43 @@ pub fn decode_eight_blocks_parallel(encoding: &Piece, id: &[u8], index: usize) -
             // 32 by default
             // load blocks
             let batch_start = batch * BATCH_SIZE * crate::BLOCK_SIZE;
-            block_in_batch_offset = 0;
-            for block in 0..BATCH_SIZE {
-                // 8 by default
-                block8[block] = GenericArray::clone_from_slice(
-                    &encoding[batch_start + block_in_batch_offset
-                        ..batch_start + block_in_batch_offset + crate::BLOCK_SIZE],
-                );
-                block_in_batch_offset += crate::BLOCK_SIZE;
-            }
-
-            // decrypt blocks
-            for _ in 0..crate::ROUNDS {
-                // 24 rounds by default
-                cipher.decrypt_blocks(&mut block8);
-            }
-
-            // xor blocks
-            for block in 0..BATCH_SIZE {
-                for byte in 0..crate::BLOCK_SIZE {
-                    block8[block][byte] ^= encoding[block_offset + byte];
+            s.spawn(move |_| {
+                let mut block_offset = (BATCH_SIZE - 1) * crate::BLOCK_SIZE
+                    + (batch - 1) * BATCH_SIZE * crate::BLOCK_SIZE;
+                let mut block_in_batch_offset = 0;
+                let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
+                for block in 0..BATCH_SIZE {
+                    // 8 by default
+                    block8[block] = GenericArray::clone_from_slice(
+                        &encoding[batch_start + block_in_batch_offset
+                            ..batch_start + block_in_batch_offset + crate::BLOCK_SIZE],
+                    );
+                    block_in_batch_offset += crate::BLOCK_SIZE;
                 }
-                block_offset += crate::BLOCK_SIZE;
-            }
 
-            // copy blocks
-            for block in 0..BATCH_SIZE {
-                // 8 by default
-                for byte in 0..crate::BLOCK_SIZE {
-                    let piece_index = (block * crate::BLOCK_SIZE) + byte;
-                    piece_block[piece_index] = block8[block][byte]
+                // decrypt blocks
+                for _ in 0..crate::ROUNDS {
+                    // 24 rounds by default
+                    cipher.decrypt_blocks(&mut block8);
                 }
-            }
+
+                // xor blocks
+                for block in 0..BATCH_SIZE {
+                    for byte in 0..crate::BLOCK_SIZE {
+                        block8[block][byte] ^= encoding[block_offset + byte];
+                    }
+                    block_offset += crate::BLOCK_SIZE;
+                }
+
+                // copy blocks
+                for block in 0..BATCH_SIZE {
+                    // 8 by default
+                    for byte in 0..crate::BLOCK_SIZE {
+                        let piece_index = (block * crate::BLOCK_SIZE) + byte;
+                        piece_block[piece_index] = block8[block][byte]
+                    }
+                }
+            });
         }
     })
     .unwrap();
