@@ -1,5 +1,6 @@
 use crate::crypto;
 use crate::utils;
+use std::cmp::Ordering;
 use std::time::Instant;
 
 pub fn run() {
@@ -297,11 +298,11 @@ fn validate_encoding() {
     // let simple_encoding_hash = crypto::digest_sha_256(&simple_encoding);
     let simple_decoding = crypto::decode_single_block(&simple_encoding, &key, index);
     let simple_decoding_hash = crypto::digest_sha_256(&simple_decoding);
-    let parallel_decoding = crypto::decode_eight_blocks(&simple_encoding, &key, index);
-    let parallel_decoding_hash = crypto::digest_sha_256(&parallel_decoding);
+    let eight_blocks_decoding = crypto::decode_eight_blocks(&simple_encoding, &key, index);
+    let eight_blocks_decoding_hash = crypto::digest_sha_256(&eight_blocks_decoding);
 
     // does simple decoding match piece?
-    if utils::are_arrays_equal(&piece_hash, &simple_decoding_hash) {
+    if piece_hash.cmp(&simple_decoding_hash) == Ordering::Equal {
         println!("Success! -- Simple decoding matches piece");
     } else {
         println!("Failure! -- Simple decoding does not match piece\n");
@@ -309,11 +310,11 @@ fn validate_encoding() {
     }
 
     // does parallel decoding match piece
-    if utils::are_arrays_equal(&piece_hash, &parallel_decoding_hash) {
-        println!("Success! -- Parallel decoding matches piece");
+    if piece_hash.cmp(&eight_blocks_decoding_hash) == Ordering::Equal {
+        println!("Success! -- 8 blocks decoding matches piece");
     } else {
-        println!("Failure! -- Parallel decoding does not match piece\n");
-        utils::compare_bytes(&piece, &simple_encoding, &parallel_decoding);
+        println!("Failure! -- 8 blocks decoding does not match piece\n");
+        utils::compare_bytes(&piece, &simple_encoding, &eight_blocks_decoding);
     }
 
     let pieces: Vec<[u8; crate::PIECE_SIZE]> =
@@ -329,7 +330,7 @@ fn validate_encoding() {
     for (i, encoding) in encodings.iter().enumerate() {
         let decoding = crypto::decode_single_block(encoding, &key, index + i);
         let decoding_hash = crypto::digest_sha_256(&decoding);
-        if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
+        if decoding_hash.cmp(&piece_hashes[i]) != Ordering::Equal {
             println!("Failure! -- Parallel encoding does not match simple decoding for piece\n");
             utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
             return;
@@ -341,7 +342,7 @@ fn validate_encoding() {
     for (i, encoding) in encodings.iter().enumerate() {
         let decoding = crypto::decode_eight_blocks(encoding, &key, index + i);
         let decoding_hash = crypto::digest_sha_256(&decoding);
-        if !utils::are_arrays_equal(&decoding_hash, &piece_hashes[i]) {
+        if decoding_hash.cmp(&piece_hashes[i]) != Ordering::Equal {
             println!("Failure! -- Parallel encoding does not match parallel decoding for piece\n");
             utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
             return;
@@ -355,7 +356,7 @@ fn validate_encoding() {
     for (i, encoding) in single_piece_encodings.iter().enumerate() {
         let decoding = crypto::decode_eight_blocks(&encoding.0, &key, encoding.1);
         let decoding_hash = crypto::digest_sha_256(&decoding);
-        if !utils::are_arrays_equal(&decoding_hash, &piece_hash) {
+        if decoding_hash.cmp(&piece_hash) != Ordering::Equal {
             println!("Failure! -- Parallel encoding of single piece does not match parallel decoding for piece at index {}\n", i);
             utils::compare_bytes(&piece, &encodings[i], &decoding);
             return;
@@ -371,7 +372,7 @@ fn validate_encoding() {
     for (i, encoding) in single_piece_parallel_encodings.iter().enumerate() {
         let decoding = crypto::decode_eight_blocks(&encoding.0, &key, encoding.1);
         let decoding_hash = crypto::digest_sha_256(&decoding);
-        if !utils::are_arrays_equal(&decoding_hash, &piece_hash) {
+        if decoding_hash.cmp(&piece_hash) != Ordering::Equal {
             println!("Failure! -- Parallel encoding of single piece encoded in parallel does not match parallel decoding for piece at index {}\n", i);
             utils::compare_bytes(&piece, &encodings[i], &decoding);
             return;

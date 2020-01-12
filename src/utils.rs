@@ -9,10 +9,6 @@ use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
 use std::io::Write;
 
-pub fn are_arrays_equal(a: &[u8], b: &[u8]) -> bool {
-    a.cmp(b) == std::cmp::Ordering::Equal
-}
-
 pub fn measure_quality(tag: &[u8]) -> u8 {
     let mut quality: u8 = 0;
     for byte in tag.iter() {
