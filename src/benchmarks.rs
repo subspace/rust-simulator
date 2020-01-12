@@ -267,26 +267,27 @@ fn validate_encoding() {
     let piece_hash = crypto::digest_sha_256(&piece);
     let index: usize = 2_342_345_234;
     let simple_encoding = crypto::encode_single_block(&piece, &key, index);
-    // let simple_encoding_hash = crypto::digest_sha_256(&simple_encoding);
-    let simple_decoding = crypto::decode_single_block(&simple_encoding, &key, index);
-    let simple_decoding_hash = crypto::digest_sha_256(&simple_decoding);
-    let eight_blocks_decoding = crypto::decode_eight_blocks(&simple_encoding, &key, index);
-    let eight_blocks_decoding_hash = crypto::digest_sha_256(&eight_blocks_decoding);
 
     // does simple decoding match piece?
-    if piece_hash.cmp(&simple_decoding_hash) == Ordering::Equal {
-        println!("Success! -- Simple decoding matches piece");
-    } else {
-        println!("Failure! -- Simple decoding does not match piece\n");
-        utils::compare_bytes(&piece, &simple_encoding, &simple_decoding);
+    let simple_decoding = crypto::decode_single_block(&simple_encoding, &key, index);
+    let simple_decoding_hash = crypto::digest_sha_256(&simple_decoding);
+    match piece_hash.cmp(&simple_decoding_hash) {
+        Ordering::Equal => println!("Success! -- Simple decoding matches piece"),
+        _ => {
+            println!("Failure! -- Simple decoding does not match piece\n");
+            utils::compare_bytes(&piece, &simple_encoding, &simple_decoding);
+        }
     }
 
-    // does parallel decoding match piece
-    if piece_hash.cmp(&eight_blocks_decoding_hash) == Ordering::Equal {
-        println!("Success! -- 8 blocks decoding matches piece");
-    } else {
-        println!("Failure! -- 8 blocks decoding does not match piece\n");
-        utils::compare_bytes(&piece, &simple_encoding, &eight_blocks_decoding);
+    // does 8 blocks decoding match piece?
+    let eight_blocks_decoding = crypto::decode_eight_blocks(&simple_encoding, &key, index);
+    let eight_blocks_decoding_hash = crypto::digest_sha_256(&eight_blocks_decoding);
+    match piece_hash.cmp(&eight_blocks_decoding_hash) {
+        Ordering::Equal => println!("Success! -- 8 blocks decoding matches piece"),
+        _ => {
+            println!("Failure! -- 8 blocks decoding does not match piece\n");
+            utils::compare_bytes(&piece, &simple_encoding, &eight_blocks_decoding);
+        }
     }
 
     let pieces: Vec<Piece> = (0..8).map(|_| crypto::random_bytes_4096()).collect();
@@ -302,25 +303,25 @@ fn validate_encoding() {
         let decoding = crypto::decode_single_block(encoding, &key, index + i);
         let decoding_hash = crypto::digest_sha_256(&decoding);
         if decoding_hash.cmp(&piece_hashes[i]) != Ordering::Equal {
-            println!("Failure! -- Parallel encoding does not match simple decoding for piece\n");
+            println!("Failure! -- 8 blocks encoding does not match simple decoding for piece\n");
             utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
             return;
         }
     }
-    println!("Success! -- All parallel encodings match simple decodings for eight pieces");
+    println!("Success! -- All 8 blocks encodings match simple decodings for eight pieces");
 
-    // does parallel decoding match parallel encoding?
+    // does 8 blocks decoding match 8 blocks encoding?
     for (i, encoding) in encodings.iter().enumerate() {
         let decoding = crypto::decode_eight_blocks(encoding, &key, index + i);
         let decoding_hash = crypto::digest_sha_256(&decoding);
         if decoding_hash.cmp(&piece_hashes[i]) != Ordering::Equal {
-            println!("Failure! -- Parallel encoding does not match parallel decoding for piece\n");
+            println!("Failure! -- 8 blocks encoding does not match 8 blocks decoding for piece\n");
             utils::compare_bytes(&pieces[i], &encodings[i], &decoding);
             return;
         }
     }
 
-    println!("Success! -- All parallel encodings match parallel decodings for eight pieces");
+    println!("Success! -- All 8 blocks encodings match 8 blocks decodings for eight pieces");
 
     let single_piece_encodings = crypto::encode_eight_blocks_single_piece(&piece, &key, index);
 
@@ -328,12 +329,56 @@ fn validate_encoding() {
         let decoding = crypto::decode_eight_blocks(&encoding.0, &key, encoding.1);
         let decoding_hash = crypto::digest_sha_256(&decoding);
         if decoding_hash.cmp(&piece_hash) != Ordering::Equal {
-            println!("Failure! -- Parallel encoding of single piece does not match parallel decoding for piece at index {}\n", i);
+            println!("Failure! -- 8 blocks encoding of single piece does not match 8 blocks decoding for piece at index {}\n", i);
             utils::compare_bytes(&piece, &encodings[i], &decoding);
             return;
         }
     }
-    println!("Success! -- All parallel encodings with single source piece match parallel decodings for eight pieces");
+    println!("Success! -- All 8 blocks encodings with single source piece match 8 blocks decodings for eight pieces");
+
+    for (i, decoding) in crypto::decode_single_block_in_parallel(
+        single_piece_encodings
+            .iter()
+            .map(|(x, _)| x.to_owned())
+            .collect::<Vec<Piece>>()
+            .as_ref(),
+        &key,
+        index,
+    )
+    .iter()
+    .enumerate()
+    {
+        //        let decoding = crypto::decode_eight_blocks(&encoding.0, &key, encoding.1);
+        let decoding_hash = crypto::digest_sha_256(decoding);
+        if decoding_hash.cmp(&piece_hash) != Ordering::Equal {
+            println!("Failure! -- 8 blocks encoding of single piece does not match single block parallel decoding for piece at index {}\n", i);
+            utils::compare_bytes(&piece, &encodings[i], decoding);
+            return;
+        }
+    }
+    println!("Success! -- All 8 blocks encodings with single source piece match single block parallel decodings");
+
+    for (i, decoding) in crypto::decode_eight_blocks_in_parallel(
+        single_piece_encodings
+            .iter()
+            .map(|(x, _)| x.to_owned())
+            .collect::<Vec<Piece>>()
+            .as_ref(),
+        &key,
+        index,
+    )
+    .iter()
+    .enumerate()
+    {
+        //        let decoding = crypto::decode_eight_blocks(&encoding.0, &key, encoding.1);
+        let decoding_hash = crypto::digest_sha_256(decoding);
+        if decoding_hash.cmp(&piece_hash) != Ordering::Equal {
+            println!("Failure! -- 8 blocks encoding of single piece does not match 8 blocks parallel decoding for piece at index {}\n", i);
+            utils::compare_bytes(&piece, &encodings[i], decoding);
+            return;
+        }
+    }
+    println!("Success! -- All 8 blocks encodings with single source piece match 8 blocks parallel decodings");
 
     let single_pieces: Vec<Piece> = (0..8).map(|_| piece.clone()).collect();
 

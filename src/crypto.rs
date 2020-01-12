@@ -461,7 +461,7 @@ pub fn encode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8]) -> Vec<Piece
     pieces
         .par_chunks(8)
         .enumerate()
-        .map(|(chunk, pieces)| encode_eight_blocks(pieces, id, chunk * 8))
+        .map(|(chunk, pieces)| encode_eight_blocks(pieces, id, chunk * crate::PIECES_PER_BATCH))
         .flatten()
         .collect()
 }
@@ -484,5 +484,21 @@ pub fn encode_eight_blocks_in_parallel_single_piece(
             )
         })
         .flatten()
+        .collect()
+}
+
+pub fn decode_single_block_in_parallel(pieces: &[Piece], id: &[u8], offset: usize) -> Vec<Piece> {
+    pieces
+        .par_iter()
+        .enumerate()
+        .map(|(index, piece)| decode_single_block(piece, id, offset + index))
+        .collect()
+}
+
+pub fn decode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8], offset: usize) -> Vec<Piece> {
+    pieces
+        .par_iter()
+        .enumerate()
+        .map(|(index, piece)| decode_eight_blocks(piece, id, offset + index))
         .collect()
 }
