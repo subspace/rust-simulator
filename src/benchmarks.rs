@@ -9,13 +9,13 @@ pub fn run() {
 
   let tests = 800;
   let key = crypto::random_bytes_32();
-  let index: usize = 2_342_345_234; 
+  let index: usize = 2_342_345_234;
 
-  // generate and collect a unique piece for each test 
+  // generate and collect a unique piece for each test
   let pieces: Vec<[u8; 4096]> = (0..tests)
     .map(|_| crypto::random_bytes_4096())
     .collect();
-    
+
   // encode and collet a unique encoding for each test
   let encodings: Vec<[u8; 4096]> = pieces
       .iter()
@@ -26,30 +26,30 @@ pub fn run() {
   // test encoding speed by finding the mean, median, and mode of each method
   println!("Testing fastest encoder/decoder speed distribution of a single piece for {} sample pieces...", tests);
   test_encode_speed(
-      &pieces, 
-      &key, 
-      "single block, single core", 
+      &pieces,
+      &key,
+      "single block, single core",
       test_encoding_speed_single_block
     );
 
   test_encode_speed(
-      &pieces, 
-      &key, 
-      "eight blocks, single core", 
+      &pieces,
+      &key,
+      "eight blocks, single core",
       test_encoding_speed_8_blocks
     );
 
   test_decode_speed(
-      &encodings, 
-      &key, 
-      "single block, single core", 
+      &encodings,
+      &key,
+      "single block, single core",
       test_decoding_speed_single_block
   );
 
   test_decode_speed(
-      &encodings, 
-      &key, 
-      "eight blocks, single core", 
+      &encodings,
+      &key,
+      "eight blocks, single core",
       test_decoding_speed_eight_blocks
   );
 
@@ -205,12 +205,12 @@ fn test_decoding_speed_eight_blocks(encodings: &Vec<[u8; crate::PIECE_SIZE]>, ke
 pub fn test_encode_throughput(
   pieces: &Vec<[u8; crate::PIECE_SIZE]>,
   key: &[u8],
-  _index: usize,
+  index: usize,
   test_name: &str,
-  encoder: fn(pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], _index: usize),
+  encoder: fn(pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], index: usize),
 ) {
   let encode_start_time = Instant::now();
-  encoder(pieces, key, _index);
+  encoder(pieces, key, index);
   let encode_time = encode_start_time.elapsed();
   println!(
       "Average encode time (per piece) for {} is {:.3}ms",
@@ -240,20 +240,20 @@ fn test_encoding_throughput_parallel_eight_blocks(pieces: &Vec<[u8; crate::PIECE
   crypto::encode_eight_blocks_in_parallel(pieces, key);
 }
 
-fn test_encoding_throughput_eight_blocks_single_piece(pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], _index: usize) {
+fn test_encoding_throughput_eight_blocks_single_piece(pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], index: usize) {
     for i in 0..(pieces.len() / 8) {
-        crypto::encode_eight_blocks_single_piece(&pieces[0], &key, _index + i * 8);
+        crypto::encode_eight_blocks_single_piece(&pieces[0], &key, index + i * 8);
     }
 }
 
-fn test_encoding_throughput_eight_blocks_parallel_single_piece(pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], _index: usize) {
+fn test_encoding_throughput_eight_blocks_parallel_single_piece(pieces: &Vec<[u8; crate::PIECE_SIZE]>, key: &[u8], index: usize) {
 
     let single_pieces: Vec<[u8; crate::PIECE_SIZE]> = (0..8)
       .map(|_| pieces[0].clone())
       .collect();
 
     for i in 0..(pieces.len() / 64) {
-      crypto::encode_eight_blocks_in_parallel_single_piece(&single_pieces, &key, _index + i * 8);
+      crypto::encode_eight_blocks_in_parallel_single_piece(&single_pieces, &key, index + i * 8);
     }
 }
 
@@ -296,7 +296,7 @@ fn validate_encoding() {
       .collect();
 
   let encodings = crypto::encode_eight_blocks(&pieces, &key, index);
-  
+
   for (i, encoding) in encodings.iter().enumerate() {
       let decoding = crypto::decode_single_block(encoding, &key, index + i);
       let decoding_hash = crypto::digest_sha_256(&decoding);
