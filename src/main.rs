@@ -31,26 +31,24 @@ pub const CHALLENGE_EVALUATIONS: usize = 16_000;
 pub type Piece = [u8; crate::PIECE_SIZE];
 
 // TODO
-// Correct/Optimize Encodings
-// derive optimal secure encoding algorithm
-// use SIMD register and AES-NI explicitly
-// use registers for hardware XOR operations
-// use register to set the number of blocks to encode/decode in parallel
-// use registers to simplify Rijndael (no key expansion)
-// compile to assembly and review code
-// when is main memory called?
-// are we using iterators optimally?
-// any change for switching to Little Endian binary encoding
-// disable hyper threading to see if there is any change
-// write parallel decoding on shared piece object
-// find most efficient software implementation
-// accelerate with a GPU
-// accelerate with ARM crypto extensions
-
-// Extend with ledger
-// Extend with network
-// Test with Docker on AWS
-
+//   Correct/Optimize Encodings
+//     derive optimal secure encoding algorithm
+//     use SIMD register and AES-NI explicitly
+//       use registers for hardware XOR operations
+//       use register to set the number of blocks to encode/decode in parallel
+//       use registers to simplify Rijndael (no key expansion)
+//     compile to assembly and review code
+//       when is main memory called?
+//       are we using iterators optimally?
+//       any change for switching to Little Endian binary encoding
+//     disable hyper threading to see if there is any change
+//     write parallel decoding on shared piece object
+//     find most efficient software implementation
+//     accelerate with a GPU
+//     accelerate with ARM crypto extensions
+//    Extend with ledger
+//   Extend with network
+//   Test with Docker on AWS
 fn main() {
     benchmarks::run();
     for plot_size in PLOT_SIZES.iter() {
