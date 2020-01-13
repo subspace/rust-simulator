@@ -1,15 +1,15 @@
 use super::crypto;
 use super::plotter;
 use super::utils;
-use ed25519_dalek;
-
-use ed25519_dalek::{Keypair, PublicKey, Signature};
+use crate::Piece;
+use ed25519_dalek::{self, Keypair, PublicKey, Signature};
+use std::cmp::Ordering;
 
 pub struct Solution {
     pub index: u64,
     pub tag: [u8; 32],
     pub quality: u8,
-    pub encoding: [u8; 4096],
+    pub encoding: Piece,
 }
 
 pub fn solve(challenge: &[u8], piece_count: usize, plot: &mut plotter::Plot) -> Solution {
@@ -34,7 +34,7 @@ pub struct Proof {
     pub tag: [u8; 32],
     pub signature: [u8; 64],
     // merkle_proof: [u8; 256],
-    pub encoding: [u8; 4096],
+    pub encoding: Piece,
 }
 
 pub fn prove(challenge: [u8; 32], solution: &Solution, keys: &Keypair) -> Proof {
@@ -56,10 +56,9 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bo
 
     // println!("Verify index is {}", index);
 
-
     // is tag correct
     let tag = crypto::create_hmac(&proof.encoding[0..4096], &proof.challenge);
-    if !utils::are_arrays_equal(&tag, &proof.tag) {
+    if tag.cmp(&proof.tag) != Ordering::Equal {
         println!("Invalid proof, tag is invalid");
         return false;
     }
@@ -68,7 +67,7 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bo
     let id = crypto::digest_sha_256(&proof.public_key);
     let decoding = crypto::decode_eight_blocks(&proof.encoding, &id[0..32], index);
     let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
-    if !utils::are_arrays_equal(&genesis_piece_hash[0..32], &decoding_hash[0..32]) {
+    if genesis_piece_hash[0..32].cmp(&decoding_hash[0..32]) != Ordering::Equal {
         println!("Invalid proof, encoding is invalid");
         // utils::compare_bytes(&proof.encoding, &proof.encoding, &decoding);
         return false;
