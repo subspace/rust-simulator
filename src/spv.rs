@@ -5,6 +5,7 @@ use crate::Piece;
 use ed25519_dalek::{self, Keypair, PublicKey, Signature};
 use std::cmp::Ordering;
 
+#[derive(Copy, Clone)]
 pub struct Solution {
     pub index: u64,
     pub tag: [u8; 32],
@@ -28,6 +29,7 @@ pub fn solve(challenge: &[u8], piece_count: usize, plot: &mut plotter::Plot) -> 
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Proof {
     pub challenge: [u8; 32],
     pub public_key: [u8; 32],
@@ -65,7 +67,7 @@ pub fn verify(proof: Proof, piece_count: usize, genesis_piece_hash: &[u8]) -> bo
 
     // verify decoding matches genesis piece
     let id = crypto::digest_sha_256(&proof.public_key);
-    let decoding = crypto::decode_eight_blocks(&proof.encoding, &id[0..32], index);
+    let decoding = crypto::decode_eight_blocks_parallel(&proof.encoding, &id[0..32], index);
     let decoding_hash = crypto::digest_sha_256(&decoding[0..4096]);
     if genesis_piece_hash[0..32].cmp(&decoding_hash[0..32]) != Ordering::Equal {
         println!("Invalid proof, encoding is invalid");

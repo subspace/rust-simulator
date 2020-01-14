@@ -21,7 +21,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // update balances
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-struct Block {
+pub struct Block {
     parent_id: [u8; 32],
     child_count: u8,
     timestamp: u128,
@@ -66,10 +66,34 @@ impl Block {
     }
 }
 
-struct AuxillaryData {
-    encoding: Piece,
-    merkle_proof: [u8; 256],
-    piece_index: u32,
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct AuxillaryData {
+    encoding: Vec<u8>,
+    merkle_proof: Vec<u8>,
+    piece_index: u64,
+}
+
+impl AuxillaryData {
+
+  pub fn new(
+    encoding: Piece, 
+    merkle_proof: Vec<u8>, 
+    piece_index: u64
+  ) -> AuxillaryData {
+    AuxillaryData {
+      encoding: encoding.to_vec(),
+      merkle_proof,
+      piece_index,
+    }
+  }
+
+  pub fn to_bytes(&self) -> Vec<u8> {
+    bincode::serialize(self).unwrap()
+  }
+
+  pub fn from_bytes(bytes: &[u8]) -> Block {
+      bincode::deserialize(bytes).unwrap()
+  }
 }
 
 // // update balance
@@ -81,6 +105,11 @@ struct AuxillaryData {
 // height
 // quality
 //
+
+struct Ledger {
+  balances: HashMap<[u8; 32], usize>,
+  chains: [Vec<Block>; 4]
+}
 
 fn start() {
     let _balances: HashMap<[u8; 32], usize> = HashMap::new();

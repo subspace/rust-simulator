@@ -5,23 +5,21 @@ mod ledger;
 mod plotter;
 mod spv;
 mod utils;
-
-use merkle::{self, MerkleTree};
-use ring::digest::{Algorithm, SHA512};
 use std::env;
 use std::path::Path;
 use std::time::Instant;
+use ledger::{ Block, AuxillaryData };
 
 pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
 pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
 pub const PLOT_SIZES: [usize; 1] = [
-    // 256,                         // 1 MB
+    256,                         // 1 MB
     // 256 * 100,                   // 100 MB
     // 256 * 1000,                  // 1 GB
     // 256 * 1000 * 100,            // 100 GB
-    256 * 1000 * 1000,            // 1 TB
+    // 256 * 1000 * 1000,            // 1 TB
     // 256 * 1000 * 1000 * 4,        // 4 TB
     // 256 * 1000 * 1000 * 16,       // 16 TB
 
@@ -29,7 +27,7 @@ pub const PLOT_SIZES: [usize; 1] = [
 pub const ROUNDS: usize = 2048;
 pub const PIECES_PER_BATCH: usize = 8;
 pub const PIECES_PER_GROUP: usize = 64;
-pub const CHALLENGE_EVALUATIONS: usize = 16_000;
+pub const CHALLENGE_EVALUATIONS: usize = 16000;
 
 pub type Piece = [u8; crate::PIECE_SIZE];
 
@@ -45,15 +43,15 @@ pub type Piece = [u8; crate::PIECE_SIZE];
 //       are we using iterators optimally?
 //       any change for switching to Little Endian binary encoding
 //     disable hyper threading to see if there is any change
-//     write parallel decoding on shared piece object
 //     find most efficient software implementation
 //     accelerate with a GPU
 //     accelerate with ARM crypto extensions
-//    Extend with ledger
+//   Extend with ledger
 //   Extend with network
 //   Test with Docker on AWS
+
 fn main() {
-    benchmarks::run();
+    // benchmarks::run();
     for plot_size in PLOT_SIZES.iter() {
         simulator(*plot_size);
     }
@@ -66,8 +64,8 @@ fn simulator(plot_size: usize) {
         CHALLENGE_EVALUATIONS
     );
 
-    // create random genesis piece
-    let genesis_piece = crypto::random_bytes_4096();
+    // derive genesis piece
+    let genesis_piece = crypto::genesis_piece_from_seed("SUBSPACE");
     let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
     println!("Created genesis piece");
 
@@ -76,18 +74,6 @@ fn simulator(plot_size: usize) {
     let binary_public_key: [u8; 32] = keys.public.to_bytes();
     let id = crypto::digest_sha_256(&binary_public_key);
     println!("Generated node id");
-
-    // build merkle tree
-    #[allow(non_upper_case_globals)]
-    static digest: &Algorithm = &SHA512;
-    let merkle_values = (0..255).map(|x| vec![x]).collect::<Vec<_>>();
-    let merkle_tree = MerkleTree::from_vec(digest, merkle_values.clone());
-    let merkle_proofs = merkle_values
-        .into_iter()
-        .map(|v| merkle_tree.gen_proof(v).unwrap())
-        .collect::<Vec<_>>();
-    let merkle_root = merkle_tree.root_hash();
-    println!("Built merkle tree");
 
     // set storage path
     let path: String;
@@ -121,7 +107,7 @@ fn simulator(plot_size: usize) {
     for group_index in 0..(plot_size / PIECES_PER_GROUP) {
         crypto::encode_eight_blocks_in_parallel_single_piece(
             &pieces,
-            &id,
+            &id,  
             group_index * PIECES_PER_GROUP,
         )
         .iter()
@@ -136,34 +122,49 @@ fn simulator(plot_size: usize) {
     let average_plot_time =
         (total_plot_time.as_nanos() / plot_size as u128) as f32 / (1000f32 * 1000f32);
 
-    println!("Average plot time is {:.3} ms per piece", average_plot_time);
+    println!(
+      "Average plot time is {:.3} ms per piece", 
+      average_plot_time)
+    ;
+
     println!(
         "Total plot time is {:.3} minutes",
         total_plot_time.as_secs_f32() / 60f32
     );
+
     println!(
         "Plotting throughput is {} mb / sec",
         ((plot_size as u64 * PIECE_SIZE as u64) / (1000 * 1000)) as f32
             / (total_plot_time.as_secs_f32())
     );
+
     println!("Solving, proving, and verifying challenges ...",);
     let evaluate_time = Instant::now();
 
+    let (merkle_proofs, merkle_root) = crypto::build_merkle_tree();
+    let tx_payload = crypto::random_bytes_4096().to_vec();
+    let mut challenge = genesis_piece_hash;
+
+    // create genesis block
+    let solution = spv::solve(&challenge, plot_size, &mut plot);
+    let proof = spv::prove(challenge, &solution, &keys);
+    let merkle_proof = crypto::get_merkle_proof(solution.index, &merkle_proofs);
+
+    let _block = Block::new(proof, 0, tx_payload);
+    let _aux_data = AuxillaryData::new(proof.encoding, merkle_proof, solution.index);
+    challenge = crypto::digest_sha_256(&solution.tag);
+
     // start evaluation loop
-    let mut challenge = crypto::random_bytes_32();
+    
     let quality_threshold = 0;
     for _ in 0..CHALLENGE_EVALUATIONS {
         let solution = spv::solve(&challenge, plot_size, &mut plot);
         if solution.quality >= quality_threshold {
             let proof = spv::prove(challenge, &solution, &keys);
             spv::verify(proof, plot_size, &genesis_piece_hash);
-            let mut merkle_index = solution.index % 256;
-            if merkle_index == 255 {
-                merkle_index = 0;
-            }
-            let merkle_proof = merkle_proofs[merkle_index as usize].clone();
-            if !merkle_proof.validate(merkle_root) {
-                println!("Invalid proof, merkle proof is invalid");
+            let merkle_proof = crypto::get_merkle_proof(solution.index, &merkle_proofs);
+            if !crypto::validate_merkle_proof(solution.index, merkle_proof, &merkle_root) {
+                // println!("Invalid proof, merkle proof is invalid");
             }
             challenge = crypto::digest_sha_256(&solution.tag);
         }
