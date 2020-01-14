@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 mod benchmarks;
 mod crypto;
+mod ledger;
 mod plotter;
 mod spv;
 mod utils;
-mod ledger;
 
-use merkle::{ self, MerkleTree };
+use merkle::{self, MerkleTree};
 use ring::digest::{Algorithm, SHA512};
-use std::path::Path;
 use std::env;
+use std::path::Path;
 use std::time::Instant;
 
 pub const PIECE_SIZE: usize = 4096;
@@ -31,36 +31,40 @@ pub const PIECES_PER_BATCH: usize = 8;
 pub const PIECES_PER_GROUP: usize = 64;
 pub const CHALLENGE_EVALUATIONS: usize = 16_000;
 
+pub type Piece = [u8; crate::PIECE_SIZE];
+
 // TODO
-  // Correct/Optimize Encodings
-    // derive optimal secure encoding algorithm 
-    // use SIMD register and AES-NI explicitly
-      // use registers for hardware XOR operations
-      // use register to set the number of blocks to encode/decode in parallel
-      // use registers to simplify Rijndael (no key expansion)
-    // compile to assembly and review code
-      // when is main memory called?
-      // are we using iterators optimally?
-      // any change for switching to Little Endian binary encoding
-    // disable hyper threading to see if there is any change
-    // write parallel decoding on shared piece object
-    // find most efficient software implementation
-    // accelerate with a GPU
-    // accelerate with ARM crypto extensions 
-
-  // Extend with ledger
-  // Extend with network
-  // Test with Docker on AWS
-
+//   Correct/Optimize Encodings
+//     derive optimal secure encoding algorithm
+//     use SIMD register and AES-NI explicitly
+//       use registers for hardware XOR operations
+//       use register to set the number of blocks to encode/decode in parallel
+//       use registers to simplify Rijndael (no key expansion)
+//     compile to assembly and review code
+//       when is main memory called?
+//       are we using iterators optimally?
+//       any change for switching to Little Endian binary encoding
+//     disable hyper threading to see if there is any change
+//     write parallel decoding on shared piece object
+//     find most efficient software implementation
+//     accelerate with a GPU
+//     accelerate with ARM crypto extensions
+//    Extend with ledger
+//   Extend with network
+//   Test with Docker on AWS
 fn main() {
-  benchmarks::run();
-  for plot_size in PLOT_SIZES.iter() {
-    simulator(*plot_size);
-  }
+    benchmarks::run();
+    for plot_size in PLOT_SIZES.iter() {
+        simulator(*plot_size);
+    }
 }
 
 fn simulator(plot_size: usize) {
-    println!("\nRunning simulation for {} GB plot with {} challenge evaluations", (plot_size * PIECE_SIZE) as f32 / (1000f32 * 1000f32 * 1000f32), CHALLENGE_EVALUATIONS);
+    println!(
+        "\nRunning simulation for {} GB plot with {} challenge evaluations",
+        (plot_size * PIECE_SIZE) as f32 / (1000f32 * 1000f32 * 1000f32),
+        CHALLENGE_EVALUATIONS
+    );
 
     // create random genesis piece
     let genesis_piece = crypto::random_bytes_4096();
@@ -85,29 +89,29 @@ fn simulator(plot_size: usize) {
     let merkle_root = merkle_tree.root_hash();
     println!("Built merkle tree");
 
-    // set storage path 
+    // set storage path
     let path: String;
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
-      let storage_path = args[1].parse::<String>().unwrap();
-      path = Path::new(&storage_path)
-        .join("plot.bin")
-        .to_str()
-        .unwrap()
-        .to_string();
+        let storage_path = args[1].parse::<String>().unwrap();
+        path = Path::new(&storage_path)
+            .join("plot.bin")
+            .to_str()
+            .unwrap()
+            .to_string();
     } else {
-      path = Path::new(".")
-        .join("results")
-        .join("plot.bin")
-        .to_str()
-        .unwrap()
-        .to_string();
+        path = Path::new(".")
+            .join("results")
+            .join("plot.bin")
+            .to_str()
+            .unwrap()
+            .to_string();
     }
-  
+
     // open the plotter
     println!("Plotting pieces to {} ...", path);
     let mut plot = plotter::Plot::new(path, plot_size);
-    
+
     let plot_time = Instant::now();
     let pieces: Vec<[u8; PIECE_SIZE]> = (0..PIECES_PER_BATCH)
         .map(|_| genesis_piece.clone())
@@ -115,24 +119,34 @@ fn simulator(plot_size: usize) {
 
     // plot pieces in groups of 64 divided into batches of 8. Each batch is encoded concurrently on the same core using instruction level parallelism, while all batches (the group) are encoded concurrently across different cores.
     for group_index in 0..(plot_size / PIECES_PER_GROUP) {
-        crypto::encode_eight_blocks_in_parallel_single_piece(&pieces, &id, group_index * PIECES_PER_GROUP)
-            .iter()
-            .enumerate()
-            .for_each(|(encoding_index, encoding)| 
-                {
-                    let plotter_index = encoding_index + (group_index * PIECES_PER_GROUP);
-                    plot.add(&encoding.0, plotter_index);
-                }
-            )
+        crypto::encode_eight_blocks_in_parallel_single_piece(
+            &pieces,
+            &id,
+            group_index * PIECES_PER_GROUP,
+        )
+        .iter()
+        .enumerate()
+        .for_each(|(encoding_index, encoding)| {
+            let plotter_index = encoding_index + (group_index * PIECES_PER_GROUP);
+            plot.add(&encoding.0, plotter_index);
+        })
     }
 
     let total_plot_time = plot_time.elapsed();
-    let average_plot_time = (total_plot_time.as_nanos() / plot_size as u128) as f32 / (1000f32 * 1000f32);
+    let average_plot_time =
+        (total_plot_time.as_nanos() / plot_size as u128) as f32 / (1000f32 * 1000f32);
 
     println!("Average plot time is {:.3} ms per piece", average_plot_time);
-    println!("Total plot time is {:.3} minutes", total_plot_time.as_secs_f32() / 60f32);
-    println!("Plotting throughput is {} mb / sec", ((plot_size as u64 * PIECE_SIZE as u64) / (1000 * 1000)) as f32 / (total_plot_time.as_secs_f32()));
-    println!("Solving, proving, and verifying challenges ...", );
+    println!(
+        "Total plot time is {:.3} minutes",
+        total_plot_time.as_secs_f32() / 60f32
+    );
+    println!(
+        "Plotting throughput is {} mb / sec",
+        ((plot_size as u64 * PIECE_SIZE as u64) / (1000 * 1000)) as f32
+            / (total_plot_time.as_secs_f32())
+    );
+    println!("Solving, proving, and verifying challenges ...",);
     let evaluate_time = Instant::now();
 
     // start evaluation loop
@@ -155,8 +169,9 @@ fn simulator(plot_size: usize) {
         }
     }
 
-    let average_evaluate_time =
-        (evaluate_time.elapsed().as_nanos() / CHALLENGE_EVALUATIONS as u128) as f32 / (1000f32 * 1000f32);
+    let average_evaluate_time = (evaluate_time.elapsed().as_nanos() / CHALLENGE_EVALUATIONS as u128)
+        as f32
+        / (1000f32 * 1000f32);
 
     println!(
         "Average evaluation time is {:.3} ms per piece",
