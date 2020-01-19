@@ -3,6 +3,7 @@ mod benchmarks;
 mod crypto;
 mod ledger;
 mod plotter;
+mod rijndael_hacks;
 mod spv;
 mod utils;
 
@@ -11,6 +12,11 @@ use ring::digest::{Algorithm, SHA512};
 use std::env;
 use std::path::Path;
 use std::time::Instant;
+
+#[cfg(target_arch = "x86")]
+use core::arch::x86 as arch;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64 as arch;
 
 pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;

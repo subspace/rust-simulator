@@ -1,3 +1,4 @@
+use crate::rijndael_hacks::Cipher;
 use crate::utils;
 use crate::Piece;
 use aes::block_cipher_trait::generic_array::GenericArray;
@@ -346,7 +347,7 @@ pub fn encode_eight_blocks_single_piece(
     let key = GenericArray::from_slice(id);
     let mut seed_block = GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
     let mut block8 = GenericArray::clone_from_slice(&[seed_block; crate::PIECES_PER_BATCH]);
-    let cipher = Aes256::new(&key);
+    let cipher = Cipher::new(&key);
     let mut encodings: Vec<(Piece, usize)> = Vec::new();
     for i in 0..crate::PIECES_PER_BATCH {
         let encoding: Piece = [0u8; crate::PIECE_SIZE];
@@ -416,7 +417,7 @@ pub fn decode_eight_blocks(encoding: &Piece, id: &[u8], index: usize) -> Piece {
     let block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
     let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
     let mut piece: Piece = [0u8; crate::PIECE_SIZE];
-    let cipher = Aes256::new(&key);
+    let cipher = Cipher::new(&key);
     let mut block_offset = 0;
 
     // 32 by default
