@@ -4,6 +4,7 @@ use crate::Piece;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 use aes::Aes256;
+use block_cipher_trait::generic_array::typenum::{U16, U8};
 use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
@@ -255,6 +256,7 @@ pub fn decode_single_block_parallel(encoding: &Piece, id: &[u8], index: usize) -
 pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Piece> {
     // setup the cipher
     const PIECES_PER_ROUND: usize = 8;
+    const BATCH_SIZE: usize = 8;
     let mut ivs: Vec<[u8; 16]> = Vec::new();
     for i in 0..PIECES_PER_ROUND {
         ivs.push(utils::usize_to_bytes(index + i));
@@ -262,7 +264,8 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
     let key = GenericArray::from_slice(id);
     let seed_block = GenericArray::clone_from_slice(&pieces[0][0..crate::BLOCK_SIZE]);
     // try into -- converts slice into fixed size array
-    let mut block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
+    let mut block8: GenericArray<GenericArray<u8, U16>, U8> =
+        GenericArray::clone_from_slice(&[seed_block; BATCH_SIZE]);
     let cipher = Cipher::new(&key);
     let mut encodings: Vec<Piece> = Vec::new();
     // simplify with iterators
@@ -288,7 +291,9 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
 
     // apply Rijndael cipher for specified rounds
     for _ in 0..crate::ROUNDS {
-        cipher.encrypt_blocks(&mut block8);
+        unsafe {
+            cipher.encrypt_blocks_dynamic(block8.as_mut_slice(), BATCH_SIZE);
+        }
     }
 
     // copy each byte from encoding into piece
@@ -318,7 +323,9 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
 
         // apply Rijndael cipher for specified rounds
         for _ in 0..crate::ROUNDS {
-            cipher.encrypt_blocks(&mut block8);
+            unsafe {
+                cipher.encrypt_blocks_dynamic(block8.as_mut_slice(), BATCH_SIZE);
+            }
         }
 
         // copy each byte from block into encoding
@@ -415,7 +422,8 @@ pub fn decode_eight_blocks(encoding: &Piece, id: &[u8], index: usize) -> Piece {
     let iv = utils::usize_to_bytes(index);
     let key = GenericArray::from_slice(id);
     let block = GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
-    let mut block8 = GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
+    let mut block8: GenericArray<GenericArray<u8, U16>, U8> =
+        GenericArray::clone_from_slice(&[block; BATCH_SIZE]);
     let mut piece: Piece = [0u8; crate::PIECE_SIZE];
     let cipher = Cipher::new(&key);
     let mut block_offset = 0;
@@ -435,7 +443,9 @@ pub fn decode_eight_blocks(encoding: &Piece, id: &[u8], index: usize) -> Piece {
     // decrypt first eight blocks
     for _ in 0..crate::ROUNDS {
         // 24 rounds by default
-        cipher.decrypt_blocks(&mut block8);
+        unsafe {
+            cipher.decrypt_blocks_dynamic(block8.as_mut_slice(), BATCH_SIZE);
+        }
     }
 
     // decode first block of first batch with IV
@@ -477,7 +487,9 @@ pub fn decode_eight_blocks(encoding: &Piece, id: &[u8], index: usize) -> Piece {
         // decrypt blocks
         for _ in 0..crate::ROUNDS {
             // 24 rounds by default
-            cipher.decrypt_blocks(&mut block8);
+            unsafe {
+                cipher.decrypt_blocks_dynamic(block8.as_mut_slice(), BATCH_SIZE);
+            }
         }
 
         // xor blocks
