@@ -263,7 +263,7 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
     let seed_block = GenericArray::clone_from_slice(&pieces[0][0..crate::BLOCK_SIZE]);
     // try into -- converts slice into fixed size array
     let mut block8 = GenericArray::clone_from_slice(&[seed_block; 8]);
-    let cipher = Aes256::new(&key);
+    let cipher = Cipher::new(&key);
     let mut encodings: Vec<Piece> = Vec::new();
     // simplify with iterators
     for _ in 0..PIECES_PER_ROUND {
@@ -347,7 +347,7 @@ pub fn encode_eight_blocks_single_piece(
     let key = GenericArray::from_slice(id);
     let mut seed_block = GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
     let mut block8 = GenericArray::clone_from_slice(&[seed_block; crate::PIECES_PER_BATCH]);
-    let cipher = Cipher::new(&key);
+    let cipher = Aes256::new(&key);
     let mut encodings: Vec<(Piece, usize)> = Vec::new();
     for i in 0..crate::PIECES_PER_BATCH {
         let encoding: Piece = [0u8; crate::PIECE_SIZE];

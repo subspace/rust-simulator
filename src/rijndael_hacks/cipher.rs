@@ -4,7 +4,7 @@ use block_cipher_trait::generic_array::typenum::{U16, U32, U8};
 use block_cipher_trait::generic_array::GenericArray;
 use core::mem;
 
-// Code below is a refactored version of aesni crate that doesn't use any macros
+// Code below is a refactored generalized version of aesni crate that doesn't use any macros
 
 type Block128 = GenericArray<u8, U16>;
 type Block128x8 = GenericArray<Block128, U8>;
