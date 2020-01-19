@@ -255,10 +255,9 @@ pub fn decode_single_block_parallel(encoding: &Piece, id: &[u8], index: usize) -
 /// Encodes a single block at a time for eight different pieces on a single core, using instruction-level parallelism
 pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Piece> {
     // setup the cipher
-    const PIECES_PER_ROUND: usize = 8;
     const BATCH_SIZE: usize = 8;
     let mut ivs: Vec<[u8; 16]> = Vec::new();
-    for i in 0..PIECES_PER_ROUND {
+    for i in 0..BATCH_SIZE {
         ivs.push(utils::usize_to_bytes(index + i));
     }
     let key = GenericArray::from_slice(id);
@@ -269,7 +268,7 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
     let cipher = Cipher::new(&key);
     let mut encodings: Vec<Piece> = Vec::new();
     // simplify with iterators
-    for _ in 0..PIECES_PER_ROUND {
+    for _ in 0..BATCH_SIZE {
         let encoding: Piece = [0u8; crate::PIECE_SIZE];
         encodings.push(encoding);
     }
@@ -277,13 +276,13 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
 
     // load the blocks at the same index across all pieces into block8
     let next_block_offset = block_offset + crate::BLOCK_SIZE;
-    for piece in 0..PIECES_PER_ROUND {
+    for piece in 0..BATCH_SIZE {
         block8[piece] =
             GenericArray::clone_from_slice(&pieces[piece][block_offset..next_block_offset]);
     }
 
     // xor iv with source block
-    for piece in 0..PIECES_PER_ROUND {
+    for piece in 0..BATCH_SIZE {
         for byte in 0..crate::BLOCK_SIZE {
             block8[piece][byte] ^= ivs[piece][byte];
         }
@@ -297,7 +296,7 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
     }
 
     // copy each byte from encoding into piece
-    for piece in 0..PIECES_PER_ROUND {
+    for piece in 0..BATCH_SIZE {
         for byte in 0..crate::BLOCK_SIZE {
             encodings[piece][byte] = block8[piece][byte];
         }
@@ -308,14 +307,14 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
     for _ in 1..crate::BLOCKS_PER_PIECE {
         // load the blocks at the same index across all pieces into block8
         let next_block_offset = block_offset + crate::BLOCK_SIZE;
-        for piece in 0..PIECES_PER_ROUND {
+        for piece in 0..BATCH_SIZE {
             block8[piece] =
                 GenericArray::clone_from_slice(&pieces[piece][block_offset..next_block_offset]);
         }
 
         // xor feedback with source block
         let previous_block_offset = block_offset - crate::BLOCK_SIZE;
-        for piece in 0..PIECES_PER_ROUND {
+        for piece in 0..BATCH_SIZE {
             for byte in 0..crate::BLOCK_SIZE {
                 block8[piece][byte] ^= encodings[piece][previous_block_offset + byte];
             }
@@ -329,7 +328,7 @@ pub fn encode_eight_blocks(pieces: &[Piece], id: &[u8], index: usize) -> Vec<Pie
         }
 
         // copy each byte from block into encoding
-        for piece in 0..PIECES_PER_ROUND {
+        for piece in 0..BATCH_SIZE {
             for byte in 0..crate::BLOCK_SIZE {
                 encodings[piece][byte + block_offset] = block8[piece][byte];
             }
