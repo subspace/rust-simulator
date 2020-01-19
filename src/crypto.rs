@@ -813,9 +813,9 @@ pub fn encode_single_block_in_parallel(pieces: &[Piece], id: &[u8]) -> Vec<Piece
 /// Throughput -> O(Number_of_cores x 8)
 pub fn encode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8]) -> Vec<Piece> {
     pieces
-        .par_chunks(16)
+        .par_chunks(8)
         .enumerate()
-        .map(|(chunk, pieces)| encode_16_blocks(pieces, id, chunk * 16))
+        .map(|(chunk, pieces)| encode_eight_blocks(pieces, id, chunk * 8))
         .flatten()
         .collect()
 }
@@ -853,6 +853,6 @@ pub fn decode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8], offset: usiz
     pieces
         .par_iter()
         .enumerate()
-        .map(|(index, piece)| decode_16_blocks(piece, id, offset + index))
+        .map(|(index, piece)| decode_eight_blocks(piece, id, offset + index))
         .collect()
 }
