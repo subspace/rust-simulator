@@ -1,4 +1,5 @@
-use crate::aes_gpu::{block_dec_k256, block_enc_k256, setkey_dec_k256, setkey_enc_k256};
+use crate::aes_gpu;
+use crate::aes_soft;
 use crate::utils;
 use crate::Piece;
 use aes::block_cipher_trait::generic_array::typenum::U16;
@@ -153,7 +154,7 @@ pub fn encode_single_block_software(piece: &Piece, id: &[u8], index: usize) -> P
         GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
     let mut encoding: Piece = [0u8; crate::PIECE_SIZE];
     let mut keys = [0u32; 60];
-    setkey_enc_k256(&id, &mut keys);
+    aes_soft::setkey_enc_k256(&id, &mut keys);
     let mut block_offset = 0;
 
     // xor first block with IV
@@ -164,7 +165,7 @@ pub fn encode_single_block_software(piece: &Piece, id: &[u8], index: usize) -> P
     // apply Rijndael cipher for specified rounds
     for _ in 0..crate::ROUNDS {
         let mut res = [0u8; 16];
-        block_enc_k256(&mut block, &mut res, &keys);
+        aes_soft::block_enc_k256(&mut block, &mut res, &keys);
         block.copy_from_slice(&res);
     }
 
@@ -184,7 +185,7 @@ pub fn encode_single_block_software(piece: &Piece, id: &[u8], index: usize) -> P
         // apply Rijndael cipher for specified rounds
         for _ in 0..crate::ROUNDS {
             let mut res = [0u8; 16];
-            block_enc_k256(&mut block, &mut res, &keys);
+            aes_soft::block_enc_k256(&mut block, &mut res, &keys);
             block.copy_from_slice(&res);
         }
 
@@ -206,7 +207,7 @@ pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece 
         GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
     let mut encoding: Piece = [0u8; crate::PIECE_SIZE];
     let mut keys = [0u32; 60];
-    setkey_enc_k256(&id, &mut keys);
+    aes_gpu::setkey_enc_k256(&id, &mut keys);
     let mut block_offset = 0;
 
     // xor first block with IV
@@ -217,7 +218,7 @@ pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece 
     // apply Rijndael cipher for specified rounds
     for _ in 0..crate::ROUNDS {
         let mut res = [0u8; 16];
-        block_enc_k256(&mut block, &mut res, &keys);
+        aes_gpu::block_enc_k256(&mut block, &mut res, &keys);
         block.copy_from_slice(&res);
     }
 
@@ -237,7 +238,7 @@ pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece 
         // apply Rijndael cipher for specified rounds
         for _ in 0..crate::ROUNDS {
             let mut res = [0u8; 16];
-            block_enc_k256(&mut block, &mut res, &keys);
+            aes_gpu::block_enc_k256(&mut block, &mut res, &keys);
             block.copy_from_slice(&res);
         }
 
@@ -310,7 +311,7 @@ pub fn decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -
     let iv = utils::usize_to_bytes(index);
     let mut piece: Piece = [0u8; crate::PIECE_SIZE];
     let mut keys = [0u32; 60];
-    setkey_dec_k256(&id, &mut keys);
+    aes_soft::setkey_dec_k256(&id, &mut keys);
     let mut block_offset = 0;
 
     let mut block: GenericArray<u8, U16> =
@@ -319,7 +320,7 @@ pub fn decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -
     // apply inverse Rijndael cipher to each encoded block
     for _ in 0..crate::ROUNDS {
         let mut res = [0u8; 16];
-        block_dec_k256(&mut block, &mut res, &keys);
+        aes_soft::block_dec_k256(&mut block, &mut res, &keys);
         block.copy_from_slice(&res);
     }
 
@@ -342,7 +343,7 @@ pub fn decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -
         // apply inverse Rijndael cipher to each encoded block
         for _ in 0..crate::ROUNDS {
             let mut res = [0u8; 16];
-            block_dec_k256(&mut block, &mut res, &keys);
+            aes_soft::block_dec_k256(&mut block, &mut res, &keys);
             block.copy_from_slice(&res);
         }
 
@@ -368,7 +369,7 @@ pub fn decode_single_block_gpu(encoding: &Piece, id: &[u8], index: usize) -> Pie
     let iv = utils::usize_to_bytes(index);
     let mut piece: Piece = [0u8; crate::PIECE_SIZE];
     let mut keys = [0u32; 60];
-    setkey_dec_k256(&id, &mut keys);
+    aes_gpu::setkey_dec_k256(&id, &mut keys);
     let mut block_offset = 0;
 
     let mut block: GenericArray<u8, U16> =
@@ -377,7 +378,7 @@ pub fn decode_single_block_gpu(encoding: &Piece, id: &[u8], index: usize) -> Pie
     // apply inverse Rijndael cipher to each encoded block
     for _ in 0..crate::ROUNDS {
         let mut res = [0u8; 16];
-        block_dec_k256(&mut block, &mut res, &keys);
+        aes_gpu::block_dec_k256(&mut block, &mut res, &keys);
         block.copy_from_slice(&res);
     }
 
@@ -400,7 +401,7 @@ pub fn decode_single_block_gpu(encoding: &Piece, id: &[u8], index: usize) -> Pie
         // apply inverse Rijndael cipher to each encoded block
         for _ in 0..crate::ROUNDS {
             let mut res = [0u8; 16];
-            block_dec_k256(&mut block, &mut res, &keys);
+            aes_gpu::block_dec_k256(&mut block, &mut res, &keys);
             block.copy_from_slice(&res);
         }
 

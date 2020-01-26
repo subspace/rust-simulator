@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 mod aes_gpu;
+mod aes_soft;
 mod benchmarks;
 mod crypto;
 mod ledger;
