@@ -6,6 +6,13 @@
 //! ## Attention!
 //! Please be careful the length of the slice (because the compiler won't check it), when passing it as a parameter of a function.
 //! Otherwise, the functions will panic `at 'index out of bounds'`, or maybe even wrose.
+
+use em::gpu_use;
+use em::ocl;
+use em::Gpu;
+use em::*;
+use std::array::FixedSizeArray;
+
 // S-Box
 const SBOX: [u8; 256] = [
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
@@ -437,8 +444,56 @@ macro_rules! setkey_256_function {
 ///     assert_eq!(output[i], expected[i]);
 /// }
 /// ```
-pub fn setkey_enc_k256(origin: &[u8], keys: &mut [u32]) {
-    setkey_256_function!(origin, keys);
+#[gpu_use]
+pub fn setkey_enc_k256(origin: &[u8]) -> [u32; 60] {
+    let mut keys = [0u32; 60];
+    gpu_do!(load(origin));
+    gpu_do!(load(keys));
+    gpu_do!(launch());
+    for i in 0..8 {
+        //keys[i] = four_u8_to_u32!(
+        //    origin[4 * i],
+        //    origin[4 * i + 1],
+        //    origin[4 * i + 2],
+        //    origin[4 * i + 3]
+        //);
+        keys[i] = (((origin[4 * i]) as u32) << 24)
+            ^ (((origin[4 * i + 1]) as u32) << 16)
+            ^ (((origin[4 * i + 2]) as u32) << 8)
+            ^ ((origin[4 * i + 3]) as u32);
+    }
+    for i in 0..6 {
+        //keys[8 * i + 8] = keys[8 * i] ^ round_g_function!(keys[8 * i + 7], i);
+        keys[8 * i + 8] = keys[8 * i]
+            ^ (((SBOX[(((keys[8 * i + 7]) >> 16) as usize) & 0xFF] ^ RC[i]) as u32) << 24)
+            ^ (((SBOX[(((keys[8 * i + 7]) >> 8) as usize) & 0xFF]) as u32) << 16)
+            ^ (((SBOX[((keys[8 * i + 7]) as usize) & 0xFF]) as u32) << 8)
+            ^ ((SBOX[((keys[8 * i + 7]) >> 24) as usize]) as u32);
+        keys[8 * i + 9] = keys[8 * i + 1] ^ keys[8 * i + 8];
+        keys[8 * i + 10] = keys[8 * i + 2] ^ keys[8 * i + 9];
+        keys[8 * i + 11] = keys[8 * i + 3] ^ keys[8 * i + 10];
+        //keys[8 * i + 12] = keys[8 * i + 4] ^ round_h_function!(keys[8 * i + 11]);
+        keys[8 * i + 12] = keys[8 * i + 4]
+            ^ (((SBOX[((keys[8 * i + 11]) >> 24) as usize]) as u32) << 24)
+            ^ (((SBOX[(((keys[8 * i + 11]) >> 16) as usize) & 0xFF]) as u32) << 16)
+            ^ (((SBOX[(((keys[8 * i + 11]) >> 8) as usize) & 0xFF]) as u32) << 8)
+            ^ ((SBOX[((keys[8 * i + 11]) as usize) & 0xFF]) as u32);
+        keys[8 * i + 13] = keys[8 * i + 5] ^ keys[8 * i + 12];
+        keys[8 * i + 14] = keys[8 * i + 6] ^ keys[8 * i + 13];
+        keys[8 * i + 15] = keys[8 * i + 7] ^ keys[8 * i + 14];
+    }
+    //keys[56] = keys[48] ^ round_g_function!(keys[55], 6);
+    keys[56] = keys[48]
+        ^ (((SBOX[(((keys[55]) >> 16) as usize) & 0xFF] ^ RC[6]) as u32) << 24)
+        ^ (((SBOX[(((keys[55]) >> 8) as usize) & 0xFF]) as u32) << 16)
+        ^ (((SBOX[((keys[55]) as usize) & 0xFF]) as u32) << 8)
+        ^ ((SBOX[((keys[55]) >> 24) as usize]) as u32);
+    keys[57] = keys[49] ^ keys[56];
+    keys[58] = keys[50] ^ keys[57];
+    keys[59] = keys[51] ^ keys[58];
+    gpu_do!(read(keys));
+
+    keys
 }
 // The keys for decryption need extra transform -- the inverse MixColumn.
 macro_rules! dkey_mixcolumn {

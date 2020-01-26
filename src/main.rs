@@ -1,3 +1,4 @@
+#![feature(fixed_size_array)]
 #![allow(dead_code)]
 mod aes_gpu;
 mod aes_soft;

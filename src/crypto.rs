@@ -206,8 +206,7 @@ pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece 
     let mut block: GenericArray<u8, U16> =
         GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
     let mut encoding: Piece = [0u8; crate::PIECE_SIZE];
-    let mut keys = [0u32; 60];
-    aes_gpu::setkey_enc_k256(&id, &mut keys);
+    let keys = aes_gpu::setkey_enc_k256(&id);
     let mut block_offset = 0;
 
     // xor first block with IV
