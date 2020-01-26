@@ -35,6 +35,20 @@ pub fn run() {
     test_encode_speed(
         &pieces,
         &key,
+        "single block, software",
+        test_encoding_speed_single_block_software,
+    );
+
+    test_encode_speed(
+        &pieces,
+        &key,
+        "single block, GPU",
+        test_encoding_speed_single_block_gpu,
+    );
+
+    test_encode_speed(
+        &pieces,
+        &key,
         "eight blocks, single core",
         test_encoding_speed_8_blocks,
     );
@@ -44,6 +58,20 @@ pub fn run() {
         &key,
         "single block, single core",
         test_decoding_speed_single_block,
+    );
+
+    test_decode_speed(
+        &encodings,
+        &key,
+        "single block, software",
+        test_decoding_speed_single_block_software,
+    );
+
+    test_decode_speed(
+        &encodings,
+        &key,
+        "single block, GPU",
+        test_decoding_speed_single_block_gpu,
     );
 
     test_decode_speed(
@@ -161,6 +189,28 @@ fn test_encoding_speed_single_block(pieces: &Vec<Piece>, key: &[u8]) -> Vec<u128
     encode_times
 }
 
+fn test_encoding_speed_single_block_software(pieces: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+    let mut encode_times: Vec<u128> = Vec::with_capacity(pieces.len());
+    for (i, piece) in pieces.iter().enumerate() {
+        let start_time = Instant::now();
+        crypto::encode_single_block_software(piece, key, i);
+        let encode_time = start_time.elapsed().as_nanos();
+        encode_times.push(encode_time);
+    }
+    encode_times
+}
+
+fn test_encoding_speed_single_block_gpu(pieces: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+    let mut encode_times: Vec<u128> = Vec::with_capacity(pieces.len());
+    for (i, piece) in pieces.iter().enumerate() {
+        let start_time = Instant::now();
+        crypto::encode_single_block_gpu(piece, key, i);
+        let encode_time = start_time.elapsed().as_nanos();
+        encode_times.push(encode_time);
+    }
+    encode_times
+}
+
 fn test_encoding_speed_8_blocks(pieces: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
     let mut encode_times: Vec<u128> = Vec::with_capacity(pieces.len());
     let chunk_size = 8;
@@ -199,6 +249,28 @@ fn test_decoding_speed_single_block(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u
     for (i, encoding) in encodings.iter().enumerate() {
         let start_time = Instant::now();
         crypto::decode_single_block(&encoding, &key, i);
+        let decode_time = start_time.elapsed().as_nanos();
+        decode_times.push(decode_time);
+    }
+    decode_times
+}
+
+fn test_decoding_speed_single_block_software(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+    let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
+    for (i, encoding) in encodings.iter().enumerate() {
+        let start_time = Instant::now();
+        crypto::decode_single_block_software(&encoding, &key, i);
+        let decode_time = start_time.elapsed().as_nanos();
+        decode_times.push(decode_time);
+    }
+    decode_times
+}
+
+fn test_decoding_speed_single_block_gpu(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+    let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
+    for (i, encoding) in encodings.iter().enumerate() {
+        let start_time = Instant::now();
+        crypto::decode_single_block_gpu(&encoding, &key, i);
         let decode_time = start_time.elapsed().as_nanos();
         decode_times.push(decode_time);
     }
