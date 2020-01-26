@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+mod aes_gpu;
 mod benchmarks;
 mod crypto;
 mod ledger;

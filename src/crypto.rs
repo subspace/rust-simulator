@@ -1,5 +1,7 @@
+use crate::aes_gpu::{block_dec_k256, block_enc_k256, setkey_dec_k256, setkey_enc_k256};
 use crate::utils;
 use crate::Piece;
+use aes::block_cipher_trait::generic_array::typenum::U16;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 use aes::Aes256;
@@ -143,6 +145,59 @@ pub fn encode_single_block(piece: &Piece, id: &[u8], index: usize) -> Piece {
     encoding
 }
 
+/// Encodes one block at a time for a single piece on a GPU
+pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece {
+    // setup the cipher
+    let iv = utils::usize_to_bytes(index);
+    let mut block: GenericArray<u8, U16> =
+        GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
+    let mut encoding: Piece = [0u8; crate::PIECE_SIZE];
+    let mut keys = [0u32; 60];
+    setkey_enc_k256(&id, &mut keys);
+    let mut block_offset = 0;
+
+    // xor first block with IV
+    for i in 0..crate::BLOCK_SIZE {
+        block[i] ^= iv[i];
+    }
+
+    // apply Rijndael cipher for specified rounds
+    for _ in 0..crate::ROUNDS {
+        let mut res = [0u8; 16];
+        block_enc_k256(&mut block, &mut res, &keys);
+        block.copy_from_slice(&res);
+    }
+
+    // copy block into encoding
+    for i in 0..crate::BLOCK_SIZE {
+        encoding[i] = block[i];
+    }
+
+    block_offset += crate::BLOCK_SIZE;
+
+    for _ in 1..crate::BLOCKS_PER_PIECE {
+        // xor feedback with source block
+        for i in 0..crate::BLOCK_SIZE {
+            block[i] ^= piece[i + block_offset];
+        }
+
+        // apply Rijndael cipher for specified rounds
+        for _ in 0..crate::ROUNDS {
+            let mut res = [0u8; 16];
+            block_enc_k256(&mut block, &mut res, &keys);
+            block.copy_from_slice(&res);
+        }
+
+        // copy block into encoding
+        for i in 0..crate::BLOCK_SIZE {
+            encoding[i + block_offset] = block[i];
+        }
+
+        block_offset += crate::BLOCK_SIZE;
+    }
+    encoding
+}
+
 /// Decodes one block at a time for a single piece on a single core
 pub fn decode_single_block(encoding: &Piece, id: &[u8], index: usize) -> Piece {
     // setup the cipher
@@ -178,6 +233,64 @@ pub fn decode_single_block(encoding: &Piece, id: &[u8], index: usize) -> Piece {
         // apply inverse Rijndael cipher to each encoded block
         for _ in 0..crate::ROUNDS {
             cipher.decrypt_block(&mut block);
+        }
+
+        // xor with iv or previous encoded block to retrieve source block
+        let previous_block_offset = block_offset - crate::BLOCK_SIZE;
+        for i in 0..crate::BLOCK_SIZE {
+            block[i] ^= encoding[previous_block_offset + i];
+        }
+
+        // copy block into encoding
+        for i in 0..crate::BLOCK_SIZE {
+            piece[i + block_offset] = block[i];
+        }
+
+        block_offset += crate::BLOCK_SIZE;
+    }
+    piece
+}
+
+/// Decodes one block at a time for a single piece on a GPU
+pub fn decode_single_block_gpu(encoding: &Piece, id: &[u8], index: usize) -> Piece {
+    // setup the cipher
+    let iv = utils::usize_to_bytes(index);
+    let mut piece: Piece = [0u8; crate::PIECE_SIZE];
+    let mut keys = [0u32; 60];
+    setkey_dec_k256(&id, &mut keys);
+    let mut block_offset = 0;
+
+    let mut block: GenericArray<u8, U16> =
+        GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
+
+    // apply inverse Rijndael cipher to each encoded block
+    for _ in 0..crate::ROUNDS {
+        let mut res = [0u8; 16];
+        block_dec_k256(&mut block, &mut res, &keys);
+        block.copy_from_slice(&res);
+    }
+
+    for i in 0..crate::BLOCK_SIZE {
+        block[i] ^= iv[i];
+    }
+
+    // copy block into encoding
+    for i in 0..crate::BLOCK_SIZE {
+        piece[i] = block[i];
+    }
+
+    block_offset += crate::BLOCK_SIZE;
+
+    for _ in 1..crate::BLOCKS_PER_PIECE {
+        block = GenericArray::clone_from_slice(
+            &encoding[block_offset..block_offset + crate::BLOCK_SIZE],
+        );
+
+        // apply inverse Rijndael cipher to each encoded block
+        for _ in 0..crate::ROUNDS {
+            let mut res = [0u8; 16];
+            block_dec_k256(&mut block, &mut res, &keys);
+            block.copy_from_slice(&res);
         }
 
         // xor with iv or previous encoded block to retrieve source block
