@@ -34,6 +34,12 @@ pub fn random_bytes_32() -> [u8; 32] {
     bytes
 }
 
+pub fn random_bytes(size: usize) -> Vec<u8> {
+  let mut vec = Vec::with_capacity(size);
+  rand::thread_rng().fill(&mut vec[..]);
+  vec
+}
+
 pub fn genesis_piece_from_seed(seed: &str) -> Piece {
     let mut piece = [0u8; crate::PIECE_SIZE];
     let mut input: Vec<u8> = Vec::with_capacity(32);
@@ -83,7 +89,7 @@ pub fn build_merkle_tree() -> (Vec<Vec<u8>>, Vec<u8>) {
   let mut leaf_nodes: Vec<Vec<u8>> = Vec::new();
   for index in 0..255 {
     let bytes = (index as u8).to_le_bytes();
-    let hash = digest_sha_512_simple(&bytes[..]);
+    let hash = digest_sha_256_simple(&bytes);
     // println!("{:?}", hash);
     leaf_nodes.push(hash);
   }
@@ -92,7 +98,8 @@ pub fn build_merkle_tree() -> (Vec<Vec<u8>>, Vec<u8>) {
   let merkle_root = merkle_tree.get_root().to_vec();
   let mut merkle_proofs: Vec<Vec<u8>> = Vec::new();
   for index in 0..255 {
-    let proof = merkle_tree.get_proof_for(index);
+    let item = digest_sha_256(&(index as u8).to_le_bytes());
+    let proof = merkle_tree.get_proof(&item).unwrap();
     // println!("{:?}", proof);
     merkle_proofs.push(proof);
   }
@@ -101,19 +108,19 @@ pub fn build_merkle_tree() -> (Vec<Vec<u8>>, Vec<u8>) {
 }
 
 pub fn get_merkle_proof(index: u64, merkle_proofs: &Vec<Vec<u8>>) -> Vec<u8> {
-  let mut merkle_index: u8 = (index % 256) as u8;
+  let mut merkle_index = (index % 256) as u8;
   if merkle_index == 255 {
     merkle_index = 0;
   }
   merkle_proofs[merkle_index as usize].clone()
 }
 
-pub fn validate_merkle_proof(index: u64, proof: Vec<u8>, root: & Vec<u8>) -> bool {
-  let mut merkle_index: u8 = (index % 256) as u8;
+pub fn validate_merkle_proof(index: usize, proof: &[u8], root: &[u8]) -> bool {
+  let mut merkle_index = (index % 256) as u8;
   if merkle_index == 255 {
       merkle_index = 0;
   }
-  let target_item = digest_sha_512_simple(&merkle_index.to_le_bytes());
+  let target_item = digest_sha_256_simple(&merkle_index.to_le_bytes());
   Tree::check_proof(&root, &proof, &target_item, digest_sha_256_simple)
 }
 
@@ -457,7 +464,7 @@ pub fn encode_eight_blocks_single_piece(
 }
 
 /// Decodes eight blocks at a time for a single piece, using instruction-level parallelism, on a single core
-pub fn decode_eight_blocks(encoding: &Piece, id: &[u8], index: usize) -> Piece {
+pub fn decode_eight_blocks(encoding: &[u8], id: &[u8], index: usize) -> Piece {
     // setup the cipher
     const BATCH_SIZE: usize = 8;
     let iv = utils::usize_to_bytes(index);
@@ -550,7 +557,7 @@ pub fn decode_eight_blocks(encoding: &Piece, id: &[u8], index: usize) -> Piece {
 }
 
 /// Decodes eight blocks at a time for a single piece, using instruction-level parallelism, on a multiple cores
-pub fn decode_eight_blocks_parallel(encoding: &Piece, id: &[u8], index: usize) -> Piece {
+pub fn decode_eight_blocks_parallel(encoding: &[u8], id: &[u8], index: usize) -> Piece {
     // setup the cipher
     const BATCH_SIZE: usize = 8;
     let iv = utils::usize_to_bytes(index);

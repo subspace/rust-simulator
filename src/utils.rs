@@ -46,16 +46,27 @@ pub fn bigint_to_usize(bigint: BigUint) -> usize {
     bigint.to_usize().unwrap()
 }
 
-// built in function
-// u32::from_le_bytes
-// to_le_bytes().as_ref()
 pub fn usize_to_bytes(number: usize) -> [u8; 16] {
     let mut iv = [0u8; 16];
-    // TODO: We probably want to use LE instead for performance reasons
     iv.as_mut()
         .write_all(&(number as u32).to_be_bytes())
         .unwrap();
     iv
+}
+
+pub fn u32_to_bytes_le(number: u32) -> [u8; 4] {
+  let mut bytes = [0u8; 4];
+  bytes.as_mut()
+    .write_all(&number.to_le_bytes())
+    .unwrap();
+  bytes
+}
+
+pub fn bytes_le_to_u32(array: &[u8]) -> u32 {
+  ((array[0] as u32) <<  0) +
+  ((array[1] as u32) <<  8) +
+  ((array[2] as u32) << 16) +
+  ((array[3] as u32) << 24)
 }
 
 pub fn print_bytes(bytes: &[u8]) {

@@ -222,7 +222,7 @@ fn test_decoding_speed_eight_blocks(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u
     let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
     for (i, encoding) in encodings.iter().enumerate() {
         let start_time = Instant::now();
-        crypto::decode_eight_blocks(&encoding, &key, i);
+        crypto::decode_eight_blocks(&encoding[..], &key, i);
         let decode_time = start_time.elapsed().as_nanos();
         decode_times.push(decode_time);
     }
@@ -234,7 +234,7 @@ fn test_decoding_speed_eight_blocks_parallel(encodings: &Vec<Piece>, key: &[u8])
     let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
     for (i, encoding) in encodings.iter().enumerate() {
         let start_time = Instant::now();
-        crypto::decode_eight_blocks_parallel(&encoding, &key, i);
+        crypto::decode_eight_blocks_parallel(&encoding[..], &key, i);
         let decode_time = start_time.elapsed().as_nanos();
         decode_times.push(decode_time);
     }
