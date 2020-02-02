@@ -5,7 +5,7 @@ pub enum ProtocolMessage {
   BlockRequest(u32),                      // On sync, main forwards block request to Net for tx by P1
   BlockRequestFrom(SocketAddr, u32),      // P2 receives at Net and forwards request to main for fetch
   BlockResponseTo(SocketAddr, Option<Block>, u32),     // P2 Main forwards response back to Net for tx
-  BlockResponse(Block),                   // P1 receives at Net and forwards response back to Main 
+  BlockResponse(Block),                   // P1 receives at Net and forwards response back to Main
   BlockProposal(FullBlock),               // Net receives new full block, validates/applies, sends back to net for re-gossip
   BlockChallenge([u8; 32]),               // Main sends challenge to solver for evaluation
   BlockSolution(plotter::Solution),       // Solver sends solution back to main for application
@@ -27,13 +27,13 @@ pub async fn run(
   let protocol_listener = async {
     println!("Main protocol loop is running...");
     loop {
-      match any_to_main_rx.recv().await {
-        Some(message) => match message {
+      if let Some(message) = any_to_main_rx.recv().await {
+        match message {
           ProtocolMessage::BlockRequestFrom(addr, index) => {
             let block = ledger.get_block_by_index(index);
             let message = ProtocolMessage::BlockResponseTo(addr, block, index);
             main_to_net_tx.send(message).await;
-          }, 
+          },
           ProtocolMessage::BlockResponse(block) => {
             // validate block
             if !block.is_valid() {
@@ -59,7 +59,7 @@ pub async fn run(
                   if mode == NodeType::Farmer || mode == NodeType::Gateway {
                     main_to_sol_tx.send(ProtocolMessage::BlockChallenge(challenge)).await;
                   }
-                  
+
                   continue;
                 }
 
@@ -73,10 +73,9 @@ pub async fn run(
               BlockStatus::Invalid => {
                 panic!("Should not be applying blocks out of order during block sync process!");
               }
-            }                 
+            }
           },
           ProtocolMessage::BlockProposal(full_block) => {
-
             let block_id = full_block.block.get_id();
 
             // do you already have this block?
@@ -93,7 +92,7 @@ pub async fn run(
               ledger.cache_pending_block(full_block);
               continue;
             }
-      
+
             // check quality first
             if !full_block.block.get_quality() > ledger.quality_threshold {
               println!("Received block proposal with insufficient quality via gossip, ignoring");
@@ -109,16 +108,15 @@ pub async fn run(
             // now we can finally apply the block
             match ledger.add_block_by_id(&full_block.block) {
               BlockStatus::Applied => {
-
                 println!("Applied new block received over the network via gossip to the ledger");
 
                 // is this the parent of a pending block?
                 if ledger.is_pending_parent(&block_id) {
                   let challenge = ledger.apply_pending_block(block_id);
-                  
+
                   if mode == NodeType::Farmer || mode == NodeType::Gateway {
                     main_to_sol_tx.send(ProtocolMessage::BlockChallenge(challenge)).await;
-                  }  
+                  }
 
                   continue;
                 }
@@ -129,7 +127,7 @@ pub async fn run(
                 // solve if farming
                 if mode == NodeType::Farmer || mode == NodeType::Gateway {
                   main_to_sol_tx.send(ProtocolMessage::BlockChallenge(full_block.block.get_id())).await;
-                }                    
+                }
               },
               BlockStatus::Pending => {
                 panic!("Logic error, add_block_by_id should not have been called if the parent is unknown...")
@@ -186,11 +184,10 @@ pub async fn run(
                 // this should not happen, control flow logic error
                 panic!("A block generated locally does not have a known parent...");
               }
-            }       
+            }
           },
           _ => (),
-        },
-        None => (),
+        }
       }
     }
   };

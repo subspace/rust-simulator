@@ -62,7 +62,7 @@ impl Node {
       data: data.to_vec(),
     };
     self.socket.send_to(&message.to_bytes(), &message.to).await.unwrap();
-    // add to pending requests 
+    // add to pending requests
     println!("Sent a {:?} message to {}", message.name, message.to);
   }
 }
@@ -108,7 +108,7 @@ impl Peers {
     if !peers.contains_key(&id) {
       println!("Adding peer with addr {} to routing table", addr);
       peers.insert(id, addr);
-      
+
       // get all contacts
       let mut contacts: Vec<SocketAddr> = Vec::new();
       for (_, socket_addr) in peers.iter() {
@@ -144,22 +144,22 @@ impl Peers {
   /// Try to retrieve a peers address by ID
   async fn try_get(&self, id: & NodeID) -> SocketAddr {
     let peers = self.peers.lock().await;
-    peers.get(id).unwrap().clone()
+    *peers.get(id).unwrap()
   }
 
   /// select one known peer at random (for get requests)
   async fn get_random_contact(&self) -> SocketAddr {
     let group = self.group.lock().await;
     let mut rng = thread_rng();
-    group.choose(&mut rng).unwrap().clone()
-  } 
+    *group.choose(&mut rng).unwrap()
+  }
 
   /// select one known peer at random, excluding a specific peer (for get retries)
   async fn get_random_contact_excluding(&self, addr: SocketAddr) -> SocketAddr {
     let group = self.group.lock().await;
     let mut rng = thread_rng();
     loop {
-      let random_addr = group.choose(&mut rng).unwrap().clone();
+      let random_addr = *group.choose(&mut rng).unwrap();
       if random_addr != addr {
         return random_addr;
       }
@@ -168,12 +168,7 @@ impl Peers {
 
   /// get all contacts for sending gossip
   async fn get_all_contacts(&self) -> Vec<SocketAddr> {
-    let group = self.group.lock().await;
-    let contacts: Vec<SocketAddr> = group
-      .iter()
-      .map(|x| (*x).clone())
-      .collect();
-    contacts
+    self.group.lock().await.to_vec()
   }
 
   /// get a binary representation of all known peers, excluding the peer making the request
@@ -181,7 +176,7 @@ impl Peers {
     let mut peers: Vec<PeerContactInfo> = Vec::new();
     let exception = self.peers.lock().await.remove_entry(&except).unwrap();
     for (node_id, socket_addr) in self.peers.lock().await.iter() {
-      peers.push(((*node_id).clone(), (*socket_addr).clone()));
+      peers.push((*node_id, *socket_addr));
     }
     self.try_add(exception.0, exception.1).await;
     let peer_list = PeerList{peers};
@@ -226,11 +221,11 @@ impl NetworkMessage {
 
 pub async fn run(
   gateway_addr: SocketAddr,
-  id: NodeID, 
-  port: u16, 
-  ip: Ipv4Addr, 
+  id: NodeID,
+  port: u16,
+  ip: Ipv4Addr,
   mode: NodeType,
-  any_to_main_tx: Sender<ProtocolMessage>, 
+  any_to_main_tx: Sender<ProtocolMessage>,
   main_to_net_rx: Receiver<ProtocolMessage>,
 ) {
   let node = Node::new(id, port, ip, mode).await;
@@ -247,10 +242,10 @@ pub async fn run(
     println!("Network listener has started, attempting to connect...");
 
     if node.mode != NodeType::Gateway {
-      // wait for connection 
-      while *is_connected.lock().await == false {
+      // wait for connection
+      while !(*is_connected.lock().await) {
         println!("Checking for a message");
-        let (len, sender) = node.socket.recv_from(&mut buffer).await.unwrap(); 
+        let (len, sender) = node.socket.recv_from(&mut buffer).await.unwrap();
         let message = NetworkMessage::from_bytes(&buffer[0..len]);
         println!("Received a {:?} message from {}", message.name, sender);
         peers.try_add(message.from_id, message.from).await;
@@ -264,7 +259,7 @@ pub async fn run(
       }
 
       // wait for peers
-      while *has_peers.lock().await == false {
+      while !(*has_peers.lock().await) {
         // may have to drop status here to prevent lockout from connect future
         let (len, sender) = node.socket.recv_from(&mut buffer).await.unwrap();
         let message = NetworkMessage::from_bytes(&buffer[0..len]);
@@ -292,8 +287,8 @@ pub async fn run(
       match message.name {
         NetworkMessageName::Ping => {
           node.send_message(
-            message.from, 
-            NetworkMessageName::Pong, 
+            message.from,
+            NetworkMessageName::Pong,
             &[]
           ).await;
         },
@@ -303,8 +298,8 @@ pub async fn run(
         NetworkMessageName::PeersRequest => {
           let contacts = peers.get_all_except(message.from_id).await;
           node.send_message(
-            message.from, 
-            NetworkMessageName::PeersResponse, 
+            message.from,
+            NetworkMessageName::PeersResponse,
             &contacts,
           ).await;
         },
@@ -318,7 +313,7 @@ pub async fn run(
           any_to_main_tx.send(ProtocolMessage::BlockRequestFrom(message.from, index)).await;
         },
         NetworkMessageName::BlockResponse => {
-          
+
           // if empty block response, request from a different peer
           if message.data.len() == 4 {
             println!("Peer did not have block at desired index, requesting from a different peer");
@@ -348,8 +343,8 @@ pub async fn run(
   let protocol_listener = async {
     println!("Network is listening for protocol messages");
     loop {
-      match main_to_net_rx.recv().await {
-        Some(message) => match message {
+      if let Some(message) = main_to_net_rx.recv().await {
+        match message {
           ProtocolMessage::BlockRequest(index) => {
             node.send_message(
               peers.get_random_contact().await,
@@ -383,8 +378,7 @@ pub async fn run(
             }
           },
           _ => (),
-        },
-        None => (),
+        }
       };
     }
   };
@@ -394,20 +388,20 @@ pub async fn run(
     println!("Calling network startup script...");
     match node.mode {
       NodeType::Peer | NodeType::Farmer =>  {
-        
+
         // ping gateway every 300 ms until you get a response
-        while *is_c.lock().await == false {
+        while !(*is_c.lock().await) {
           println!("Sending ping to gateway on startup");
           node.send_message(gateway_addr, NetworkMessageName::Ping, &[]).await;
           task::sleep(Duration::from_millis(300)).await;
         }
-        
+
         // ask gateway for peers every second until you get a response
-        while *has_p.lock().await == false {
+        while !(*has_p.lock().await) {
           println!("Sending peers request to gateway on startup");
           node.send_message(gateway_addr, NetworkMessageName::PeersRequest, &[]).await;
           task::sleep(Duration::from_secs(1)).await;
-        }          
+        }
       },
       NodeType::Gateway => {},
     };
