@@ -404,11 +404,10 @@ impl Ledger {
   /// Adds a pointer to this block id for the given index in the ledger
   /// Multiple blocks may exist at the same index, the first block reflects the longest chain
   fn add_block_by_index(&mut self, index: u32, id: [u8; 32]) {
-    if let Some(v) = self.block_ids_by_index.get_mut(&index) {
-      (*v).push(id.clone());
-    } else {
-      self.block_ids_by_index.insert(index, vec![id]);
-    }
+    self.block_ids_by_index
+        .entry(index)
+        .and_modify(|v| v.push(id))
+        .or_insert(vec![id]);
   }
 
   /// Retrieve a block by id
