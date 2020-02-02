@@ -425,15 +425,15 @@ impl Ledger {
     // ToDo
     // for now take the first id in the vec
     // later we will have to handle forks and reorgs
-    match self.block_ids_by_index.get(&index) {
-      Some(block_ids) => {
-        match self.blocks_by_id.get(&block_ids[0]) {
-          Some(block_wrapper) => Some(block_wrapper.block.clone()),
-          None => panic!("Block index and blocks map have gotten out of sync!"),
-        }
-      },
-      None => None,
-    }
+    self.block_ids_by_index.get(&index)
+        .and_then(|block_ids| {
+            Some(
+                self.blocks_by_id.get(&block_ids[0])
+                    .expect("Block index and blocks map have gotten out of sync!")
+                    .block
+                    .clone()
+            )
+        })
   }
 
   /// Retrieve the balance for a given node id
