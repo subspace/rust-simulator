@@ -23,7 +23,7 @@ hex = "0.4.0"
 serde = { version = "1.0.104", features = ["derive"] }
 bincode = "1.2.1"
 crossbeam-utils = "0.7.0"
-em = { git = "https://github.com/calebwin/emu.git", branch = "dev" }
+ocl = "0.19"
 
 [profile]
 [profile.release]
