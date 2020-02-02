@@ -75,6 +75,8 @@ impl Block {
       utils::measure_quality(&self.tag)
     }
 
+    // TODO: Should probably be a `validate()` method that returns `Result<(), BlockValidationError>`
+    //  or `BlockValidationResult` instead of printing to the stdout
     pub fn is_valid(&self) -> bool {
 
       // verify the signature
@@ -113,6 +115,7 @@ impl Block {
         // tx_payload: hex::encode(self.tx_payload.clone()),
       };
 
+      // Should probably return data structure, but not print to the stdout
       println!("Block with id: {}\n{:#?}", id, pretty_block);
     }
 }
