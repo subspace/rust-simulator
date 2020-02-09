@@ -11,8 +11,6 @@ use std::ffi::CString;
 
 mod aes_soft;
 
-// From this repo: https://github.com/zliuva/OpenCL-AES
-//const AES_OPENCL: &str = include_str!("aes_gpu/OpenCL-AES/eng_opencl_aes.cl");
 const AES_OPENCL: &str = include_str!("aes_kernels.cl");
 const ROUND_KEYS: usize = 60;
 const BLOCK_SIZE: usize = 16;
