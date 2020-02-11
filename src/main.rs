@@ -55,7 +55,7 @@ pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
 pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
-pub const PIECE_COUNT: usize = 
+pub const PIECE_COUNT: usize =
     256                               // 1 MB
     // 256 * 100                      // 100 MB
     // 256 * 1000                     // 1 GB
@@ -115,13 +115,13 @@ async fn main() {
     let mut plot = plotter::Plot::new(path, PIECE_COUNT);
 
     let pieces: Vec<[u8; PIECE_SIZE]> = (0..PIECES_PER_BATCH)
-      .map(|_| genesis_piece.clone())
+      .map(|_| genesis_piece)
       .collect();
 
     for group_index in 0..(PIECE_COUNT / PIECES_PER_GROUP) {
         crypto::encode_eight_blocks_in_parallel_single_piece(
             &pieces,
-            &id,  
+            &id,
             group_index * PIECES_PER_GROUP,
         )
         .iter()
@@ -170,7 +170,7 @@ async fn main() {
         any_to_main_rx,
         main_to_net_tx,
         main_to_sol_tx
-      ).await; 
+      ).await;
     });
 
     // setup udp socket listener loop and spawn background task

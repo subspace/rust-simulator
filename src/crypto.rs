@@ -10,13 +10,13 @@ use byteorder::WriteBytesExt;
 use crossbeam_utils::thread;
 use ed25519_dalek;
 use ed25519_dalek::Keypair;
+use merkle_tree_binary::Tree;
 use rand;
 use rand::rngs::OsRng;
 use rand::Rng;
 use rayon::prelude::*;
 use ring;
 use ring::{digest, hmac};
-use merkle_tree_binary::Tree;
 
 const ROUNDS: usize = 1;
 
@@ -35,22 +35,20 @@ pub fn random_bytes_32() -> [u8; 32] {
 }
 
 pub fn random_bytes(size: usize) -> Vec<u8> {
-  let mut vec = Vec::with_capacity(size);
-  rand::thread_rng().fill(&mut vec[..]);
-  vec
+    let mut vec = Vec::with_capacity(size);
+    rand::thread_rng().fill(&mut vec[..]);
+    vec
 }
 
 pub fn genesis_piece_from_seed(seed: &str) -> Piece {
     let mut piece = [0u8; crate::PIECE_SIZE];
-    let mut input: Vec<u8> = Vec::with_capacity(32);
-    input.extend_from_slice(seed.as_bytes());
+    let mut input = seed.as_bytes().to_vec();
     let mut block_offset = 0;
     for _ in 0..128 {
+        // TODO: It doesn't make sense to hash something that has 0 bytes
         input.truncate(0);
         input.extend_from_slice(&digest_sha_256(&input));
-        for byte in 0..32 {
-            piece[byte + block_offset] = input[byte];
-        }
+        piece[block_offset..(32 + block_offset)].clone_from_slice(&input[..32]);
         block_offset += 32;
     }
     piece
@@ -69,11 +67,11 @@ pub fn digest_sha_256(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn digest_sha_256_simple(data: &[u8]) -> Vec<u8> {
-  digest::digest(&digest::SHA256, data).as_ref().to_vec()
- }
+    digest::digest(&digest::SHA256, data).as_ref().to_vec()
+}
 
 pub fn digest_sha_512_simple(data: &[u8]) -> Vec<u8> {
- digest::digest(&digest::SHA512, data).as_ref().to_vec()
+    digest::digest(&digest::SHA512, data).as_ref().to_vec()
 }
 
 pub fn create_hmac(message: &[u8], challenge: &[u8]) -> [u8; 32] {
@@ -84,44 +82,47 @@ pub fn create_hmac(message: &[u8], challenge: &[u8]) -> [u8; 32] {
     array
 }
 
+// TODO: this function does something strange
 pub fn build_merkle_tree() -> (Vec<Vec<u8>>, Vec<u8>) {
+    let mut leaf_nodes: Vec<Vec<u8>> = Vec::new();
+    // TODO: Is it really supposed to iterate from 0 til 254? Maybe `0..=255` should have been used instead?
+    for index in 0..255 {
+        let bytes = (index as u8).to_le_bytes();
+        let hash = digest_sha_256_simple(&bytes);
+        // println!("{:?}", hash);
+        leaf_nodes.push(hash);
+    }
+    // println!("{:?}", leaf_nodes);
+    let merkle_tree = Tree::new(&leaf_nodes, digest_sha_256_simple);
+    let merkle_root = merkle_tree.get_root().to_vec();
+    let mut merkle_proofs: Vec<Vec<u8>> = Vec::new();
+    for index in 0..255 {
+        let item = digest_sha_256(&(index as u8).to_le_bytes());
+        let proof = merkle_tree.get_proof(&item).unwrap();
+        // println!("{:?}", proof);
+        merkle_proofs.push(proof);
+    }
 
-  let mut leaf_nodes: Vec<Vec<u8>> = Vec::new();
-  for index in 0..255 {
-    let bytes = (index as u8).to_le_bytes();
-    let hash = digest_sha_256_simple(&bytes);
-    // println!("{:?}", hash);
-    leaf_nodes.push(hash);
-  }
-  // println!("{:?}", leaf_nodes);
-  let merkle_tree = Tree::new(&leaf_nodes, digest_sha_256_simple);
-  let merkle_root = merkle_tree.get_root().to_vec();
-  let mut merkle_proofs: Vec<Vec<u8>> = Vec::new();
-  for index in 0..255 {
-    let item = digest_sha_256(&(index as u8).to_le_bytes());
-    let proof = merkle_tree.get_proof(&item).unwrap();
-    // println!("{:?}", proof);
-    merkle_proofs.push(proof);
-  }
-  
-  (merkle_proofs, merkle_root)
+    (merkle_proofs, merkle_root)
 }
 
-pub fn get_merkle_proof(index: u64, merkle_proofs: &Vec<Vec<u8>>) -> Vec<u8> {
-  let mut merkle_index = (index % 256) as u8;
-  if merkle_index == 255 {
-    merkle_index = 0;
-  }
-  merkle_proofs[merkle_index as usize].clone()
+// TODO: this function does something strange, `index: u64` looks suspicious comparing to next function
+pub fn get_merkle_proof(index: u64, merkle_proofs: &[Vec<u8>]) -> Vec<u8> {
+    let mut merkle_index = (index % 256) as usize;
+    if merkle_index == 255 {
+        merkle_index = 0;
+    }
+    merkle_proofs[merkle_index].clone()
 }
 
+// TODO: this function does something strange
 pub fn validate_merkle_proof(index: usize, proof: &[u8], root: &[u8]) -> bool {
-  let mut merkle_index = (index % 256) as u8;
-  if merkle_index == 255 {
-      merkle_index = 0;
-  }
-  let target_item = digest_sha_256_simple(&merkle_index.to_le_bytes());
-  Tree::check_proof(&root, &proof, &target_item, digest_sha_256_simple)
+    let mut merkle_index = (index % 256) as u8;
+    if merkle_index == 255 {
+        merkle_index = 0;
+    }
+    let target_item = digest_sha_256_simple(&merkle_index.to_le_bytes());
+    Tree::check_proof(&root, &proof, &target_item, digest_sha_256_simple)
 }
 
 pub fn encode(piece: &Piece, index: u32, id: &[u8]) -> Vec<u8> {

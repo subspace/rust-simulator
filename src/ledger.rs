@@ -10,7 +10,7 @@ use ed25519_dalek::{self, PublicKey, Signature};
   ToDo
 
   Iterations
-    X 1. Single Chain / Single Farmer 
+    X 1. Single Chain / Single Farmer
       2. Single Chain / Many Farmers
       3. Many Chains / Single Farmer
       4. Many Chains / Many Farmers
@@ -75,6 +75,8 @@ impl Block {
       utils::measure_quality(&self.tag)
     }
 
+    // TODO: Should probably be a `validate()` method that returns `Result<(), BlockValidationError>`
+    //  or `BlockValidationResult` instead of printing to the stdout
     pub fn is_valid(&self) -> bool {
 
       // verify the signature
@@ -113,6 +115,7 @@ impl Block {
         // tx_payload: hex::encode(self.tx_payload.clone()),
       };
 
+      // Should probably return data structure, but not print to the stdout
       println!("Block with id: {}\n{:#?}", id, pretty_block);
     }
 }
@@ -127,8 +130,8 @@ pub struct Proof {
 impl Proof {
 
   pub fn new(
-    encoding: Piece, 
-    merkle_proof: Vec<u8>, 
+    encoding: Piece,
+    merkle_proof: Vec<u8>,
     piece_index: u64
   ) -> Proof {
     Proof {
@@ -204,7 +207,7 @@ impl FullBlock {
     if !crypto::validate_merkle_proof(self.proof.piece_index as usize, &self.proof.merkle_proof, merkle_root) {
       println!("Invalid full block, merkle proof is invalid");
       return false;
-  } 
+  }
 
     // validate the encoding
     let id = crypto::digest_sha_256(&self.block.public_key);
@@ -246,7 +249,7 @@ pub struct Ledger {
   pending_blocks: HashMap<[u8; 32], FullBlock>, // <block_id, FullBlock>
   pending_parents: HashMap<[u8; 32], [u8; 32]>, // <parent_id, child_id>
   pub height: u32,
-  pub quality: u32, 
+  pub quality: u32,
   pub merkle_root: Vec<u8>,
   pub genesis_piece_hash: [u8; 32],
   pub quality_threshold: u8,
@@ -317,7 +320,7 @@ impl Ledger {
 
             let block_copy = full_block.block.clone();
             self.remove_pending_block(&block_copy);
-            
+
             // add the block by id
             match self.add_block_by_id(&block_copy) {
               BlockStatus::Applied => {
@@ -359,7 +362,7 @@ impl Ledger {
       // does parent exist in block map
       match self.blocks_by_id.get_mut(&block.parent_id) {
         Some(parent_block_wrapper) => {
-          if parent_block_wrapper.children.len() == 0 {
+          if parent_block_wrapper.children.is_empty() {
             parent_block_wrapper.children.push(block_id);
           } else {
             // we have a fork, must compare quality, for now return invalid
@@ -373,7 +376,7 @@ impl Ledger {
         }
       }
     }
-    
+
     // update height
     self.height += 1;
 
@@ -381,13 +384,10 @@ impl Ledger {
     self.quality += block.get_quality() as u32;
 
     // update balances, get or add account
-    if self.balances.contains_key(&block_id) {
-      let  balance = self.balances.get_mut(&block_id).unwrap();
-      *balance += block.reward as usize;
-    } else {
-      self.balances.insert(block_id, block.reward as usize);
-    }
-
+    self.balances
+        .entry(block_id)
+        .and_modify(|balance| *balance += block.reward as usize)
+        .or_insert(block.reward as usize);
     // add new block to block map
     let block_wrapper = BlockWrapper {
       block: block.clone(),
@@ -404,11 +404,10 @@ impl Ledger {
   /// Adds a pointer to this block id for the given index in the ledger
   /// Multiple blocks may exist at the same index, the first block reflects the longest chain
   fn add_block_by_index(&mut self, index: u32, id: [u8; 32]) {
-    if let Some(v) = self.block_ids_by_index.get_mut(&index) {
-      (*v).push(id.clone());
-    } else {
-      self.block_ids_by_index.insert(index, vec![id.clone()]);
-    }
+    self.block_ids_by_index
+        .entry(index)
+        .and_modify(|v| v.push(id))
+        .or_insert(vec![id]);
   }
 
   /// Retrieve a block by id
@@ -425,24 +424,21 @@ impl Ledger {
   pub fn get_block_by_index(&self, index: u32) -> Option<Block> {
     // ToDo
     // for now take the first id in the vec
-    // later we will have to handle forks and reorgs 
-    match self.block_ids_by_index.get(&index) {
-      Some(block_ids) => {
-        match self.blocks_by_id.get(&block_ids[0]) {
-          Some(block_wrapper) => Some(block_wrapper.block.clone()),
-          None => panic!("Block index and blocks map have gotten out of sync!"),
-        }
-      },
-      None => None,
-    }
+    // later we will have to handle forks and reorgs
+    self.block_ids_by_index.get(&index)
+        .and_then(|block_ids| {
+            Some(
+                self.blocks_by_id.get(&block_ids[0])
+                    .expect("Block index and blocks map have gotten out of sync!")
+                    .block
+                    .clone()
+            )
+        })
   }
 
   /// Retrieve the balance for a given node id
   pub fn get_balance(&self, id: &[u8]) -> Option<usize> {
-    match self.balances.get(id) {
-      Some (balance) => Some(balance.clone()),
-      None => None,
-    }
+    self.balances.get(id).copied()
   }
 
   /// Print the balance of all accounts in the ledger
