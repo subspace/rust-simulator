@@ -87,7 +87,7 @@ async fn main() {
     // create genesis piece and plot
     let genesis_piece = crypto::genesis_piece_from_seed("SUBSPACE");
     let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
-    let wait_time: u64 = 1000; // solve wait time in milliseconds
+    let wait_time: u64 = 0; // solve wait time in milliseconds
 
     // set storage path
     let path: String;

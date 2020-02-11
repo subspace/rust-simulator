@@ -22,24 +22,28 @@ const ROUNDS: usize = 1;
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 
+/// Generate a array of random bytes of length 4096 to be used as a random piece.
 pub fn random_bytes_4096() -> Piece {
     let mut bytes = [0u8; crate::PIECE_SIZE];
     rand::thread_rng().fill(&mut bytes[..]);
     bytes
 }
 
+/// Generate a array of random bytes of length 32 to be used as a random challenge or id.
 pub fn random_bytes_32() -> [u8; 32] {
     let mut bytes = [0u8; 32];
     rand::thread_rng().fill(&mut bytes[..]);
     bytes
 }
 
+/// Generate a vec of random bytes of any length
 pub fn random_bytes(size: usize) -> Vec<u8> {
     let mut vec = Vec::with_capacity(size);
     rand::thread_rng().fill(&mut vec[..]);
     vec
 }
 
+/// Returns a deterministically generated genesis piece from a string seed.
 pub fn genesis_piece_from_seed(seed: &str) -> Piece {
     let mut piece = [0u8; crate::PIECE_SIZE];
     let mut input = seed.as_bytes().to_vec();
@@ -52,11 +56,13 @@ pub fn genesis_piece_from_seed(seed: &str) -> Piece {
     piece
 }
 
+/// Returns a ED25519 key pair from a randomly generated seed.
 pub fn gen_keys() -> ed25519_dalek::Keypair {
     let mut csprng = OsRng {};
     Keypair::generate(&mut csprng)
 }
 
+/// Returns the SHA-256 hash of some input data as a fixed length array.
 pub fn digest_sha_256(data: &[u8]) -> [u8; 32] {
     let mut array = [0u8; 32];
     let hash = digest::digest(&digest::SHA256, data).as_ref().to_vec();
@@ -64,14 +70,17 @@ pub fn digest_sha_256(data: &[u8]) -> [u8; 32] {
     array
 }
 
+/// Returns the SHA-256 hash of some input data as a 32 byte vec.
 pub fn digest_sha_256_simple(data: &[u8]) -> Vec<u8> {
     digest::digest(&digest::SHA256, data).as_ref().to_vec()
 }
 
+/// Returns the SHA-512 hash of some input data as a 64 byte vec.
 pub fn digest_sha_512_simple(data: &[u8]) -> Vec<u8> {
     digest::digest(&digest::SHA512, data).as_ref().to_vec()
 }
 
+/// Returns a hash bashed message authentication code unique to a message and challenge.
 pub fn create_hmac(message: &[u8], challenge: &[u8]) -> [u8; 32] {
     let key = hmac::Key::new(hmac::HMAC_SHA256, challenge);
     let mut array = [0u8; 32];
@@ -80,45 +89,35 @@ pub fn create_hmac(message: &[u8], challenge: &[u8]) -> [u8; 32] {
     array
 }
 
-// TODO: this function does something strange
+/// Deterministically builds a merkle tree with leaves the indices 0 to 255. Used to simulate the work done to prove and verity state blocks without having to build a state chain.
 pub fn build_merkle_tree() -> (Vec<Vec<u8>>, Vec<u8>) {
     let mut leaf_nodes: Vec<Vec<u8>> = Vec::new();
-    // TODO: Is it really supposed to iterate from 0 til 254? Maybe `0..=255` should have been used instead?
-    for index in 0..255 {
+    for index in 0..256 {
         let bytes = (index as u8).to_le_bytes();
         let hash = digest_sha_256_simple(&bytes);
-        // println!("{:?}", hash);
         leaf_nodes.push(hash);
     }
-    // println!("{:?}", leaf_nodes);
     let merkle_tree = Tree::new(&leaf_nodes, digest_sha_256_simple);
     let merkle_root = merkle_tree.get_root().to_vec();
     let mut merkle_proofs: Vec<Vec<u8>> = Vec::new();
-    for index in 0..255 {
+    for index in 0..256 {
         let item = digest_sha_256(&(index as u8).to_le_bytes());
         let proof = merkle_tree.get_proof(&item).unwrap();
-        // println!("{:?}", proof);
         merkle_proofs.push(proof);
     }
 
     (merkle_proofs, merkle_root)
 }
 
-// TODO: this function does something strange, `index: u64` looks suspicious comparing to next function
+/// Retrieves the merkle proof for a given challenge using the test merkle tree
 pub fn get_merkle_proof(index: u64, merkle_proofs: &[Vec<u8>]) -> Vec<u8> {
-    let mut merkle_index = (index % 256) as usize;
-    if merkle_index == 255 {
-        merkle_index = 0;
-    }
+    let merkle_index = (index % 256) as usize;
     merkle_proofs[merkle_index].clone()
 }
 
-// TODO: this function does something strange
+/// Validates the merkle proof for a given challenge using the test merkle tree
 pub fn validate_merkle_proof(index: usize, proof: &[u8], root: &[u8]) -> bool {
-    let mut merkle_index = (index % 256) as u8;
-    if merkle_index == 255 {
-        merkle_index = 0;
-    }
+    let merkle_index = (index % 256) as u8;
     let target_item = digest_sha_256_simple(&merkle_index.to_le_bytes());
     Tree::check_proof(&root, &proof, &target_item, digest_sha_256_simple)
 }
