@@ -2,25 +2,23 @@
 
 mod benchmarks;
 mod crypto;
-mod utils;
-mod plotter;
-mod network;
-mod manager;
 mod ledger;
+mod manager;
+mod network;
+mod plotter;
 mod solver;
+mod utils;
 
-use ledger::{FullBlock, Block, Proof, Ledger, BlockStatus};
-use network::{NodeType};
-use manager::{ProtocolMessage};
-use std::env;
-use std::path::Path;
-use std::net::{SocketAddr, Ipv4Addr};
-use std::time::Duration;
-use async_std::sync::{channel};
+use async_std::sync::channel;
 use async_std::task;
 use futures::join;
-
-
+use ledger::{Block, BlockStatus, FullBlock, Ledger, Proof};
+use manager::ProtocolMessage;
+use network::NodeType;
+use std::env;
+use std::net::{Ipv4Addr, SocketAddr};
+use std::path::Path;
+use std::time::Duration;
 
 /* TODO
   1. Integrate and Extend Network
@@ -87,7 +85,7 @@ async fn main() {
     // create genesis piece and plot
     let genesis_piece = crypto::genesis_piece_from_seed("SUBSPACE");
     let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
-    let wait_time: u64 = 0; // solve wait time in milliseconds
+    let wait_time: u64 = 1000; // solve wait time in milliseconds
 
     // set storage path
     let path: String;
@@ -114,9 +112,7 @@ async fn main() {
     println!("Plotting pieces to {} ...", path);
     let mut plot = plotter::Plot::new(path, PIECE_COUNT);
 
-    let pieces: Vec<[u8; PIECE_SIZE]> = (0..PIECES_PER_BATCH)
-      .map(|_| genesis_piece)
-      .collect();
+    let pieces: Vec<[u8; PIECE_SIZE]> = (0..PIECES_PER_BATCH).map(|_| genesis_piece).collect();
 
     for group_index in 0..(PIECE_COUNT / PIECES_PER_GROUP) {
         crypto::encode_eight_blocks_in_parallel_single_piece(
@@ -147,43 +143,40 @@ async fn main() {
     let mut ledger = Ledger::new(merkle_root, genesis_piece_hash, quality_threshold);
 
     // solve loop
-    let solve = task::spawn( async move {
-      solver::run(
-        wait_time,
-        main_to_sol_rx,
-        sol_to_main_tx,
-        &mut plot,
-      ).await;
+    let solve = task::spawn(async move {
+        solver::run(wait_time, main_to_sol_rx, sol_to_main_tx, &mut plot).await;
     });
 
     // setup protocol manager loop and spawn background task
-    let main = task::spawn( async move {
-      manager::run(
-        mode,
-        genesis_piece_hash,
-        quality_threshold,
-        binary_public_key,
-        keys,
-        merkle_proofs,
-        tx_payload,
-        &mut ledger,
-        any_to_main_rx,
-        main_to_net_tx,
-        main_to_sol_tx
-      ).await;
+    let main = task::spawn(async move {
+        manager::run(
+            mode,
+            genesis_piece_hash,
+            quality_threshold,
+            binary_public_key,
+            keys,
+            merkle_proofs,
+            tx_payload,
+            &mut ledger,
+            any_to_main_rx,
+            main_to_net_tx,
+            main_to_sol_tx,
+        )
+        .await;
     });
 
     // setup udp socket listener loop and spawn background task
-    let net = task::spawn( async move {
-      network::run(
-        gateway_addr,
-        id,
-        port,
-        ip,
-        mode,
-        any_to_main_tx,
-        main_to_net_rx,
-      ).await;
+    let net = task::spawn(async move {
+        network::run(
+            gateway_addr,
+            id,
+            port,
+            ip,
+            mode,
+            any_to_main_tx,
+            main_to_net_rx,
+        )
+        .await;
     });
 
     join!(net, main, solve);

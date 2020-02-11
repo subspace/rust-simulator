@@ -51,18 +51,16 @@ pub fn usize_to_bytes(number: usize) -> [u8; 16] {
 }
 
 pub fn u32_to_bytes_le(number: u32) -> [u8; 4] {
-  let mut bytes = [0u8; 4];
-  bytes.as_mut()
-    .write_all(&number.to_le_bytes())
-    .unwrap();
-  bytes
+    let mut bytes = [0u8; 4];
+    bytes.as_mut().write_all(&number.to_le_bytes()).unwrap();
+    bytes
 }
 
 pub fn bytes_le_to_u32(array: &[u8]) -> u32 {
-  (array[0] as u32) +
-  ((array[1] as u32) <<  8) +
-  ((array[2] as u32) << 16) +
-  ((array[3] as u32) << 24)
+    (array[0] as u32)
+        + ((array[1] as u32) << 8)
+        + ((array[2] as u32) << 16)
+        + ((array[3] as u32) << 24)
 }
 
 pub fn print_bytes(bytes: &[u8]) {

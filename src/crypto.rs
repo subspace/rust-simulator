@@ -45,7 +45,7 @@ pub fn genesis_piece_from_seed(seed: &str) -> Piece {
     let mut piece = [0u8; crate::PIECE_SIZE];
     let mut input = seed.as_bytes().to_vec();
     let mut block_offset = 0;
-    for _ in 0..128 {    
+    for _ in 0..128 {
         input = digest_sha_256(&input).to_vec();
         piece[block_offset..(32 + block_offset)].clone_from_slice(&input[..32]);
         block_offset += 32;

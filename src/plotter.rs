@@ -1,9 +1,9 @@
+use super::*;
 use crate::Piece;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::SeekFrom;
-use super::*;
 
 pub struct Plot {
     path: String,
