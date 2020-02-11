@@ -8,14 +8,11 @@ use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
 use crossbeam_utils::thread;
-use ed25519_dalek;
 use ed25519_dalek::Keypair;
 use merkle_tree_binary::Tree;
-use rand;
 use rand::rngs::OsRng;
 use rand::Rng;
 use rayon::prelude::*;
-use ring;
 use ring::{digest, hmac};
 
 const ROUNDS: usize = 1;

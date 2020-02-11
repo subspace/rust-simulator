@@ -1,5 +1,4 @@
 use super::*;
-use bincode;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -407,7 +406,7 @@ impl Ledger {
     self.block_ids_by_index
         .entry(index)
         .and_modify(|v| v.push(id))
-        .or_insert(vec![id]);
+        .or_insert_with(|| vec![id]);
   }
 
   /// Retrieve a block by id

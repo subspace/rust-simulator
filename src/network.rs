@@ -377,7 +377,9 @@ pub async fn run(
               ).await;
             }
           },
-          _ => (),
+          _ => (
+            panic!("Network protocol message listener has received an unknown protocol message")
+          ),
         }
       };
     }

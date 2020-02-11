@@ -1,10 +1,6 @@
-use bitintr;
 use bitintr::Lzcnt;
-use hex;
 use itertools::izip;
-use num_bigint;
 use num_bigint::{BigUint, ToBigUint};
-use num_traits;
 use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
 use std::io::Write;
@@ -63,7 +59,7 @@ pub fn u32_to_bytes_le(number: u32) -> [u8; 4] {
 }
 
 pub fn bytes_le_to_u32(array: &[u8]) -> u32 {
-  ((array[0] as u32) <<  0) +
+  (array[0] as u32) +
   ((array[1] as u32) <<  8) +
   ((array[2] as u32) << 16) +
   ((array[3] as u32) << 24)
