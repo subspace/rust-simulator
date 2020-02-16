@@ -1,13 +1,14 @@
 use ocl::core::{
     build_program, create_buffer, create_command_queue, create_context, create_kernel,
-    create_program_with_source, enqueue_kernel, enqueue_read_buffer, enqueue_write_buffer, finish,
-    set_kernel_arg, ArgVal, ContextProperties, Event, Uchar, Uchar16, Uchar4, Uint,
+    create_program_with_source, enqueue_kernel, enqueue_read_buffer, enqueue_write_buffer,
+    set_kernel_arg, ArgVal, ContextProperties, Event, Uchar16, Uint,
 };
 use ocl::flags;
 use ocl::Device;
 use ocl::Platform;
 use std::convert::TryInto;
 use std::ffi::CString;
+use std::ops::Deref;
 use std::time::Instant;
 
 mod aes_soft;
@@ -16,22 +17,20 @@ const AES_OPENCL: &str = include_str!("aes_kernels.cl");
 const ROUND_KEYS: usize = 60;
 const BLOCK_SIZE: usize = 16;
 
-fn u8_slice_to_uchar4_vec(input: &[u8]) -> Vec<Uchar4> {
+fn u8_slice_to_uchar16_vec(input: &[u8]) -> Vec<Uchar16> {
     assert_eq!(input.len() % 4, 0);
 
     input
-        .chunks_exact(4)
+        .chunks_exact(16)
         .map(|chunk| chunk.try_into().unwrap())
-        .map(|chunk: [u8; 4]| Uchar4::from(chunk))
+        .map(|chunk: [u8; 16]| Uchar16::from(chunk))
         .collect()
 }
 
-fn u32_slice_to_uchar4_vec(input: &[u32]) -> Vec<Uchar4> {
-    assert_eq!(input.len() % 4, 0);
-
+fn u32_slice_to_uint_vec(input: &[u32]) -> Vec<Uint> {
     input
         .iter()
-        .map(|chunk| Uchar4::from(chunk.to_le_bytes()))
+        .map(|chunk| Uint::from(chunk.to_owned()))
         .collect()
 }
 
@@ -74,14 +73,20 @@ fn main() -> ocl::Result<()> {
 
     let encrypt_kernel = create_kernel(&program, "aes_256")?;
 
-    let buffer_in =
-        unsafe { create_buffer(&context, flags::MEM_READ_ONLY, BLOCK_SIZE, None::<&[Uchar]>)? };
+    let buffer_in = unsafe {
+        create_buffer(
+            &context,
+            flags::MEM_READ_ONLY,
+            BLOCK_SIZE,
+            None::<&[Uchar16]>,
+        )?
+    };
     let buffer_out = unsafe {
         create_buffer(
             &context,
             flags::MEM_WRITE_ONLY,
             BLOCK_SIZE,
-            None::<&[Uchar]>,
+            None::<&[Uchar16]>,
         )?
     };
     let buffer_round_keys =
@@ -100,7 +105,7 @@ fn main() -> ocl::Result<()> {
                 &buffer_in,
                 true,
                 0,
-                &&u8_slice_to_uchar4_vec(&block),
+                &&u8_slice_to_uchar16_vec(&block),
                 None::<Event>,
                 Some(&mut event),
             )?;
@@ -115,7 +120,7 @@ fn main() -> ocl::Result<()> {
                 &buffer_round_keys,
                 true,
                 0,
-                &u32_slice_to_uchar4_vec(&keys),
+                &u32_slice_to_uint_vec(&keys),
                 None::<Event>,
                 Some(&mut event),
             )?;
@@ -132,14 +137,13 @@ fn main() -> ocl::Result<()> {
                     1,
                     None,
                     // TODO: Figure out what is the optimal size
-                    &[128, 0, 0],
+                    &[1, 0, 0],
                     None,
                     None::<Event>,
                     None::<&mut Event>,
                 )
             }?;
         }
-        finish(&queue)?;
         println!("{}us", start.elapsed().as_micros());
     }
 

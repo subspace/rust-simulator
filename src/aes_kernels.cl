@@ -323,32 +323,34 @@ __constant uint TD3[256] = {
 };
 
 __kernel void aes_256(
-	__global uchar* input, __global uchar* output,
+	__global uchar16* input, __global uchar16* output,
 	__global uint* keys)
 {
+    uint gid = get_global_id(0);
+
     uint wa0 = (
-        ((uint)input[0] << 24)
-        ^ ((uint)input[1] << 16)
-        ^ ((uint)input[2] << 8)
-        ^ (uint)input[3]
+        ((uint)input[gid][0] << 24)
+        ^ ((uint)input[gid][1] << 16)
+        ^ ((uint)input[gid][2] << 8)
+        ^ (uint)input[gid][3]
     ) ^ keys[0];
     uint wa1 = (
-        ((uint)input[4] << 24)
-        ^ ((uint)input[5] << 16)
-        ^ ((uint)input[6] << 8)
-        ^ (uint)input[7]
+        ((uint)input[gid][4] << 24)
+        ^ ((uint)input[gid][5] << 16)
+        ^ ((uint)input[gid][6] << 8)
+        ^ (uint)input[gid][7]
     ) ^ keys[1];
     uint wa2 = (
-        ((uint)input[8] << 24)
-        ^ ((uint)input[9] << 16)
-        ^ ((uint)input[10] << 8)
-        ^ (uint)input[11]
+        ((uint)input[gid][8] << 24)
+        ^ ((uint)input[gid][9] << 16)
+        ^ ((uint)input[gid][10] << 8)
+        ^ (uint)input[gid][11]
     ) ^ keys[2];
     uint wa3 = (
-        ((uint)input[12] << 24)
-        ^ ((uint)input[13] << 16)
-        ^ ((uint)input[14] << 8)
-        ^ (uint)input[15]
+        ((uint)input[gid][12] << 24)
+        ^ ((uint)input[gid][13] << 16)
+        ^ ((uint)input[gid][14] << 8)
+        ^ (uint)input[gid][15]
     ) ^ keys[3];
     uint wb0 = TE0[(size_t)(wa0 >> 24)]
         ^ TE1[((size_t)(wa1 >> 16)) & 0xFF]
@@ -412,20 +414,20 @@ __kernel void aes_256(
             ^ TE3[(size_t)wa2 & 0xFF]
             ^ keys[8 * i + 7];
     }
-    output[0] = SBOX[(size_t)(wb0 >> 24)] ^ ((uchar)(keys[60 - 4] >> 24));
-    output[1] = SBOX[((size_t)(wb1 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 4] >> 16));
-    output[2] = SBOX[((size_t)(wb2 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 4] >> 8));
-    output[3] = SBOX[(size_t)wb3 & 0xFF] ^ ((uchar)keys[60 - 4]);
-    output[4] = SBOX[(size_t)(wb1 >> 24)] ^ ((uchar)(keys[60 - 3] >> 24));
-    output[5] = SBOX[((size_t)(wb2 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 3] >> 16));
-    output[6] = SBOX[((size_t)(wb3 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 3] >> 8));
-    output[7] = SBOX[(size_t)wb0 & 0xFF] ^ ((uchar)keys[60 - 3]);
-    output[8] = SBOX[(size_t)(wb2 >> 24)] ^ ((uchar)(keys[60 - 2] >> 24));
-    output[9] = SBOX[((size_t)(wb3 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 2] >> 16));
-    output[10] = SBOX[((size_t)(wb0 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 2] >> 8));
-    output[11] = SBOX[(size_t)wb1 & 0xFF] ^ ((uchar)keys[60 - 2]);
-    output[12] = SBOX[(size_t)(wb3 >> 24)] ^ ((uchar)(keys[60 - 1] >> 24));
-    output[13] = SBOX[((size_t)(wb0 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 1] >> 16));
-    output[14] = SBOX[((size_t)(wb1 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 1] >> 8));
-    output[15] = SBOX[(size_t)wb2 & 0xFF] ^ ((uchar)keys[60 - 1]);
+    output[gid][0] = SBOX[(size_t)(wb0 >> 24)] ^ ((uchar)(keys[60 - 4] >> 24));
+    output[gid][1] = SBOX[((size_t)(wb1 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 4] >> 16));
+    output[gid][2] = SBOX[((size_t)(wb2 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 4] >> 8));
+    output[gid][3] = SBOX[(size_t)wb3 & 0xFF] ^ ((uchar)keys[60 - 4]);
+    output[gid][4] = SBOX[(size_t)(wb1 >> 24)] ^ ((uchar)(keys[60 - 3] >> 24));
+    output[gid][5] = SBOX[((size_t)(wb2 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 3] >> 16));
+    output[gid][6] = SBOX[((size_t)(wb3 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 3] >> 8));
+    output[gid][7] = SBOX[(size_t)wb0 & 0xFF] ^ ((uchar)keys[60 - 3]);
+    output[gid][8] = SBOX[(size_t)(wb2 >> 24)] ^ ((uchar)(keys[60 - 2] >> 24));
+    output[gid][9] = SBOX[((size_t)(wb3 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 2] >> 16));
+    output[gid][10] = SBOX[((size_t)(wb0 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 2] >> 8));
+    output[gid][11] = SBOX[(size_t)wb1 & 0xFF] ^ ((uchar)keys[60 - 2]);
+    output[gid][12] = SBOX[(size_t)(wb3 >> 24)] ^ ((uchar)(keys[60 - 1] >> 24));
+    output[gid][13] = SBOX[((size_t)(wb0 >> 16)) & 0xFF] ^ ((uchar)(keys[60 - 1] >> 16));
+    output[gid][14] = SBOX[((size_t)(wb1 >> 8)) & 0xFF] ^ ((uchar)(keys[60 - 1] >> 8));
+    output[gid][15] = SBOX[(size_t)wb2 & 0xFF] ^ ((uchar)keys[60 - 1]);
 }
