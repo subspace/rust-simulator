@@ -165,7 +165,7 @@ pub fn encode_single_block_software(piece: &Piece, id: &[u8], index: usize) -> P
     // apply Rijndael cipher for specified rounds
     for _ in 0..crate::ROUNDS {
         let mut res = [0u8; 16];
-        aes_soft::block_enc_k256(&mut block, &mut res, &keys);
+        aes_soft::block_enc_k256(&block, &mut res, &keys);
         block.copy_from_slice(&res);
     }
 
@@ -185,7 +185,7 @@ pub fn encode_single_block_software(piece: &Piece, id: &[u8], index: usize) -> P
         // apply Rijndael cipher for specified rounds
         for _ in 0..crate::ROUNDS {
             let mut res = [0u8; 16];
-            aes_soft::block_enc_k256(&mut block, &mut res, &keys);
+            aes_soft::block_enc_k256(&block, &mut res, &keys);
             block.copy_from_slice(&res);
         }
 
@@ -320,7 +320,7 @@ pub fn decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -
     // apply inverse Rijndael cipher to each encoded block
     for _ in 0..crate::ROUNDS {
         let mut res = [0u8; 16];
-        aes_soft::block_dec_k256(&mut block, &mut res, &keys);
+        aes_soft::block_dec_k256(&block, &mut res, &keys);
         block.copy_from_slice(&res);
     }
 
@@ -343,7 +343,7 @@ pub fn decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -
         // apply inverse Rijndael cipher to each encoded block
         for _ in 0..crate::ROUNDS {
             let mut res = [0u8; 16];
-            aes_soft::block_dec_k256(&mut block, &mut res, &keys);
+            aes_soft::block_dec_k256(&block, &mut res, &keys);
             block.copy_from_slice(&res);
         }
 
