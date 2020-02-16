@@ -1,6 +1,6 @@
 use ocl::core::{
-    self, build_program, create_buffer, create_command_queue, create_context, create_kernel,
-    create_program_with_source, enqueue_kernel, enqueue_read_buffer, enqueue_write_buffer,
+    build_program, create_buffer, create_command_queue, create_context, create_kernel,
+    create_program_with_source, enqueue_kernel, enqueue_read_buffer, enqueue_write_buffer, finish,
     set_kernel_arg, ArgVal, ContextProperties, Event, Uchar, Uchar16, Uchar4, Uint,
 };
 use ocl::flags;
@@ -8,6 +8,7 @@ use ocl::Device;
 use ocl::Platform;
 use std::convert::TryInto;
 use std::ffi::CString;
+use std::time::Instant;
 
 mod aes_soft;
 
@@ -47,7 +48,13 @@ fn main() -> ocl::Result<()> {
     aes_soft::setkey_enc_k256(&key, &mut keys);
 
     let mut res = [0u8; BLOCK_SIZE];
-    aes_soft::block_enc_k256(&block, &mut res, &keys);
+    {
+        let start = Instant::now();
+        for _ in 0..1024 {
+            aes_soft::block_enc_k256(&block, &mut res, &keys);
+        }
+        println!("{}us", start.elapsed().as_micros());
+    }
     println!("Correct result: {:?}", res);
 
     // Init start
@@ -67,18 +74,12 @@ fn main() -> ocl::Result<()> {
 
     let encrypt_kernel = create_kernel(&program, "aes_256")?;
 
-    let buffer_in = unsafe {
-        create_buffer(
-            &context,
-            flags::MEM_READ_ONLY | flags::MEM_ALLOC_HOST_PTR,
-            BLOCK_SIZE,
-            None::<&[Uchar]>,
-        )?
-    };
+    let buffer_in =
+        unsafe { create_buffer(&context, flags::MEM_READ_ONLY, BLOCK_SIZE, None::<&[Uchar]>)? };
     let buffer_out = unsafe {
         create_buffer(
             &context,
-            flags::MEM_WRITE_ONLY | flags::MEM_ALLOC_HOST_PTR,
+            flags::MEM_WRITE_ONLY,
             BLOCK_SIZE,
             None::<&[Uchar]>,
         )?
@@ -121,19 +122,26 @@ fn main() -> ocl::Result<()> {
         }
     }
 
-    unsafe {
-        enqueue_kernel(
-            &queue,
-            &encrypt_kernel,
-            1,
-            None,
-            // TODO: Figure out what is the optimal size
-            &[128, 0, 0],
-            None,
-            None::<Event>,
-            None::<&mut Event>,
-        )
-    }?;
+    {
+        let start = Instant::now();
+        for _ in 0..1024 {
+            unsafe {
+                enqueue_kernel(
+                    &queue,
+                    &encrypt_kernel,
+                    1,
+                    None,
+                    // TODO: Figure out what is the optimal size
+                    &[128, 0, 0],
+                    None,
+                    None::<Event>,
+                    None::<&mut Event>,
+                )
+            }?;
+        }
+        finish(&queue)?;
+        println!("{}us", start.elapsed().as_micros());
+    }
 
     let mut res = vec![Uchar16::from([0u8; BLOCK_SIZE])];
     {
