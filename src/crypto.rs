@@ -1,4 +1,4 @@
-use crate::aes_gpu;
+use crate::aes_open_cl::Aes256OpenCL;
 use crate::aes_soft;
 use crate::utils;
 use crate::Piece;
@@ -200,13 +200,14 @@ pub fn encode_single_block_software(piece: &Piece, id: &[u8], index: usize) -> P
 }
 
 /// Encodes one block at a time for a single piece on a GPU
-pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece {
+pub fn encode_single_block_open_cl(piece: &Piece, id: &[u8], index: usize) -> Piece {
     // setup the cipher
     let iv = utils::usize_to_bytes(index);
     let mut block: GenericArray<u8, U16> =
         GenericArray::clone_from_slice(&piece[0..crate::BLOCK_SIZE]);
     let mut encoding: Piece = [0u8; crate::PIECE_SIZE];
-    let keys = aes_gpu::setkey_enc_k256(&id);
+    let mut keys = [0u32; 60];
+    aes_soft::setkey_enc_k256(&id, &mut keys);
     let mut block_offset = 0;
 
     // xor first block with IV
@@ -214,10 +215,11 @@ pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece 
         block[i] ^= iv[i];
     }
 
+    let aes_256_open_cl = Aes256OpenCL::new().unwrap();
+
     // apply Rijndael cipher for specified rounds
     for _ in 0..crate::ROUNDS {
-        let mut res = [0u8; 16];
-        aes_gpu::block_enc_k256(&mut block, &mut res, &keys);
+        let res = aes_256_open_cl.encrypt(&block, &keys).unwrap();
         block.copy_from_slice(&res);
     }
 
@@ -236,8 +238,7 @@ pub fn encode_single_block_gpu(piece: &Piece, id: &[u8], index: usize) -> Piece 
 
         // apply Rijndael cipher for specified rounds
         for _ in 0..crate::ROUNDS {
-            let mut res = [0u8; 16];
-            aes_gpu::block_enc_k256(&mut block, &mut res, &keys);
+            let res = aes_256_open_cl.encrypt(&block, &keys).unwrap();
             block.copy_from_slice(&res);
         }
 
@@ -363,21 +364,22 @@ pub fn decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -
 }
 
 /// Decodes one block at a time for a single piece on a GPU
-pub fn decode_single_block_gpu(encoding: &Piece, id: &[u8], index: usize) -> Piece {
+pub fn decode_single_block_open_cl(encoding: &Piece, id: &[u8], index: usize) -> Piece {
     // setup the cipher
     let iv = utils::usize_to_bytes(index);
     let mut piece: Piece = [0u8; crate::PIECE_SIZE];
     let mut keys = [0u32; 60];
-    aes_gpu::setkey_dec_k256(&id, &mut keys);
+    aes_soft::setkey_dec_k256(&id, &mut keys);
     let mut block_offset = 0;
 
     let mut block: GenericArray<u8, U16> =
         GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
 
+    let aes_256_open_cl = Aes256OpenCL::new().unwrap();
+
     // apply inverse Rijndael cipher to each encoded block
     for _ in 0..crate::ROUNDS {
-        let mut res = [0u8; 16];
-        aes_gpu::block_dec_k256(&mut block, &mut res, &keys);
+        let res = aes_256_open_cl.decrypt(&block, &keys).unwrap();
         block.copy_from_slice(&res);
     }
 
@@ -399,8 +401,7 @@ pub fn decode_single_block_gpu(encoding: &Piece, id: &[u8], index: usize) -> Pie
 
         // apply inverse Rijndael cipher to each encoded block
         for _ in 0..crate::ROUNDS {
-            let mut res = [0u8; 16];
-            aes_gpu::block_dec_k256(&mut block, &mut res, &keys);
+            let res = aes_256_open_cl.decrypt(&block, &keys).unwrap();
             block.copy_from_slice(&res);
         }
 

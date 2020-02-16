@@ -42,8 +42,8 @@ pub fn run() {
     test_encode_speed(
         &pieces,
         &key,
-        "single block, GPU",
-        test_encoding_speed_single_block_gpu,
+        "single block, OpenCL",
+        test_encoding_speed_single_block_open_cl,
     );
 
     test_encode_speed(
@@ -70,8 +70,8 @@ pub fn run() {
     test_decode_speed(
         &encodings,
         &key,
-        "single block, GPU",
-        test_decoding_speed_single_block_gpu,
+        "single block, OpenCL",
+        test_decoding_speed_single_block_open_cl,
     );
 
     test_decode_speed(
@@ -200,11 +200,11 @@ fn test_encoding_speed_single_block_software(pieces: &Vec<Piece>, key: &[u8]) ->
     encode_times
 }
 
-fn test_encoding_speed_single_block_gpu(pieces: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+fn test_encoding_speed_single_block_open_cl(pieces: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
     let mut encode_times: Vec<u128> = Vec::with_capacity(pieces.len());
     for (i, piece) in pieces.iter().enumerate() {
         let start_time = Instant::now();
-        crypto::encode_single_block_gpu(piece, key, i);
+        crypto::encode_single_block_open_cl(piece, key, i);
         let encode_time = start_time.elapsed().as_nanos();
         encode_times.push(encode_time);
     }
@@ -266,11 +266,11 @@ fn test_decoding_speed_single_block_software(encodings: &Vec<Piece>, key: &[u8])
     decode_times
 }
 
-fn test_decoding_speed_single_block_gpu(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
+fn test_decoding_speed_single_block_open_cl(encodings: &Vec<Piece>, key: &[u8]) -> Vec<u128> {
     let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
     for (i, encoding) in encodings.iter().enumerate() {
         let start_time = Instant::now();
-        crypto::decode_single_block_gpu(&encoding, &key, i);
+        crypto::decode_single_block_open_cl(&encoding, &key, i);
         let decode_time = start_time.elapsed().as_nanos();
         decode_times.push(decode_time);
     }
