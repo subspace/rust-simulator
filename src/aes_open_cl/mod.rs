@@ -4,8 +4,8 @@ use ocl::{
     core::{
         build_program, create_buffer, create_command_queue, create_context, create_kernel,
         create_program_with_source, enqueue_kernel, enqueue_read_buffer, enqueue_write_buffer,
-        set_kernel_arg, ArgVal, CommandQueue, Context, ContextProperties, Event, Kernel, Mem,
-        Uchar16, Uint,
+        finish, set_kernel_arg, ArgVal, CommandQueue, Context, ContextProperties, Event, Kernel,
+        Mem, Uchar16, Uint,
     },
     flags, Device, Platform, Result,
 };
@@ -154,6 +154,9 @@ impl Aes256OpenCL {
                 output.extend_from_slice(&result);
             }
         }
+
+        finish(&self.queue)?;
+
         Ok(output)
     }
 
@@ -248,6 +251,9 @@ impl Aes256OpenCL {
                 output.extend_from_slice(&result);
             }
         }
+
+        finish(&self.queue)?;
+
         Ok(output)
     }
 }
