@@ -16,6 +16,7 @@ mod aes_soft;
 const AES_OPENCL: &str = include_str!("aes_kernels.cl");
 const ROUND_KEYS: usize = 60;
 const BLOCK_SIZE: usize = 16;
+const ITERATIONS: usize = 10_240_000;
 
 fn u8_slice_to_uchar16_vec(input: &[u8]) -> Vec<Uchar16> {
     assert_eq!(input.len() % 4, 0);
@@ -49,7 +50,7 @@ fn main() -> ocl::Result<()> {
     let mut res = [0u8; BLOCK_SIZE];
     {
         let start = Instant::now();
-        for _ in 0..1024 {
+        for _ in 0..ITERATIONS {
             aes_soft::block_enc_k256(&block, &mut res, &keys);
         }
         println!("{}us", start.elapsed().as_micros());
@@ -77,7 +78,7 @@ fn main() -> ocl::Result<()> {
         create_buffer(
             &context,
             flags::MEM_READ_ONLY,
-            BLOCK_SIZE,
+            BLOCK_SIZE * ITERATIONS,
             None::<&[Uchar16]>,
         )?
     };
@@ -85,7 +86,7 @@ fn main() -> ocl::Result<()> {
         create_buffer(
             &context,
             flags::MEM_WRITE_ONLY,
-            BLOCK_SIZE,
+            BLOCK_SIZE * ITERATIONS,
             None::<&[Uchar16]>,
         )?
     };
@@ -105,7 +106,12 @@ fn main() -> ocl::Result<()> {
                 &buffer_in,
                 true,
                 0,
-                &&u8_slice_to_uchar16_vec(&block),
+                &u8_slice_to_uchar16_vec(
+                    &(0..ITERATIONS)
+                        .flat_map(|_| &block)
+                        .map(|x| x.to_owned())
+                        .collect::<Vec<u8>>(),
+                ),
                 None::<Event>,
                 Some(&mut event),
             )?;
@@ -129,15 +135,14 @@ fn main() -> ocl::Result<()> {
 
     {
         let start = Instant::now();
-        for _ in 0..1024 {
+        for _ in 0..1 {
             unsafe {
                 enqueue_kernel(
                     &queue,
                     &encrypt_kernel,
                     1,
                     None,
-                    // TODO: Figure out what is the optimal size
-                    &[1, 0, 0],
+                    &[ITERATIONS, 0, 0],
                     None,
                     None::<Event>,
                     None::<&mut Event>,
