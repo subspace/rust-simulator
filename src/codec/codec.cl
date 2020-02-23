@@ -323,9 +323,10 @@ __constant uint TD3[256] = {
 };
 
 inline void aes_256_enc(
-	__local uchar16* input, __local uchar16* output,
-	__local uint* keys)
-{
+	const uchar16* input,
+	uchar16* output,
+	const uint* keys
+) {
     uint gid = get_global_id(0);
 
     uint wa0 = (
@@ -435,9 +436,10 @@ inline void aes_256_enc(
 }
 
 inline void aes_256_dec(
-	__global uchar16* input, __global uchar16* output,
-	__global uint* keys)
-{
+	__global uchar16* input,
+	__global uchar16* output,
+	__global uint* keys
+) {
     uint gid = get_global_id(0);
 
     uint wa0 = (
@@ -551,15 +553,16 @@ inline void aes_256_dec(
 __kernel void aes_256_enc_iterations(
 	__global const uchar16* input,
 	__global uchar16* output,
-	__global const uint* keys,
+	__constant const uint* keys,
 	const uint iterations
 ) {
-    __local uchar16 local_input;
-    __local uchar16 local_output;
-    __local uint local_keys;
+    uchar16 local_input;
+    uchar16 local_output;
+    uint local_keys;
 
     local_input = *input;
     local_keys = *keys;
+
     for (uint i = 0; i < iterations; ++i) {
         aes_256_enc(&local_input, &local_output, &local_keys);
         local_input = local_output;

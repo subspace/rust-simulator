@@ -52,7 +52,7 @@ impl Codec {
         let buffer_round_keys = unsafe {
             create_buffer(
                 &context,
-                flags::MEM_READ_ONLY,
+                flags::MEM_READ_ONLY | flags::MEM_ALLOC_HOST_PTR,
                 ROUND_KEYS_LENGTH,
                 None::<&[Uint]>,
             )?
@@ -92,13 +92,13 @@ impl Codec {
             &self.context,
             &mut self.buffer_in,
             input.len(),
-            flags::MEM_READ_ONLY,
+            flags::MEM_READ_ONLY | flags::MEM_ALLOC_HOST_PTR,
         )?;
         let buffer_out = Self::validate_or_allocate_buffer::<Uchar16>(
             &self.context,
             &mut self.buffer_out,
             input.len(),
-            flags::MEM_WRITE_ONLY,
+            flags::MEM_WRITE_ONLY | flags::MEM_ALLOC_HOST_PTR,
         )?;
 
         // TODO: Set these to `null` afterwards?
