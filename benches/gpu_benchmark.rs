@@ -3,7 +3,7 @@ use rust_simulator::aes_soft;
 use rust_simulator::codec::Codec;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let aes_256_open_cl = Codec::new().unwrap();
+    let mut aes_256_open_cl = Codec::new().unwrap();
 
     let key = vec![
         210, 51, 245, 243, 109, 154, 58, 127, 99, 229, 195, 34, 103, 170, 183, 16, 61, 83, 196,

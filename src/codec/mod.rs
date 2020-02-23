@@ -7,7 +7,7 @@ use ocl::{
         finish, set_kernel_arg, ArgVal, CommandQueue, Context, ContextProperties, Event, Kernel,
         Mem, Uchar16, Uint,
     },
-    flags, Device, Platform, Result,
+    flags, Device, MemFlags, OclPrm, Platform, Result,
 };
 use std::ffi::CString;
 
@@ -15,7 +15,14 @@ const AES_OPEN_CL: &str = include_str!("codec.cl");
 const ROUND_KEYS_LENGTH: usize = 60;
 const BLOCK_SIZE: usize = 16;
 
+struct CachedBuffer {
+    mem: Mem,
+    buffer_size: usize,
+}
+
 pub struct Codec {
+    buffer_in: Option<CachedBuffer>,
+    buffer_out: Option<CachedBuffer>,
     buffer_round_keys: Mem,
     context: Context,
     // decrypt_kernel: Kernel,
@@ -58,7 +65,11 @@ impl Codec {
         )?;
         // set_kernel_arg(&decrypt_kernel, 2, ArgVal::mem(&buffer_round_keys))?;
 
+        let buffer_in = Default::default();
+        let buffer_out = Default::default();
         Ok(Self {
+            buffer_in,
+            buffer_out,
             buffer_round_keys,
             context,
             // decrypt_kernel,
@@ -70,29 +81,25 @@ impl Codec {
     /// Takes plaintext input that is multiple of block size (16 bytes) and expanded round keys
     /// Produces ciphertext
     pub fn aes_256_enc_iterations(
-        &self,
+        &mut self,
         input: &[u8],
         keys: &[u32; ROUND_KEYS_LENGTH],
         iterations: u32,
     ) -> Result<Vec<u8>> {
         assert_eq!(input.len() % BLOCK_SIZE, 0);
 
-        let buffer_in = unsafe {
-            create_buffer(
-                &self.context,
-                flags::MEM_READ_ONLY,
-                input.len(),
-                None::<&[Uchar16]>,
-            )?
-        };
-        let buffer_out = unsafe {
-            create_buffer(
-                &self.context,
-                flags::MEM_WRITE_ONLY,
-                input.len(),
-                None::<&[Uchar16]>,
-            )?
-        };
+        let buffer_in = Self::validate_or_allocate_buffer::<Uchar16>(
+            &self.context,
+            &mut self.buffer_in,
+            input.len(),
+            flags::MEM_READ_ONLY,
+        )?;
+        let buffer_out = Self::validate_or_allocate_buffer::<Uchar16>(
+            &self.context,
+            &mut self.buffer_out,
+            input.len(),
+            flags::MEM_WRITE_ONLY,
+        )?;
 
         // TODO: Set these to `null` afterwards?
         set_kernel_arg(
@@ -180,5 +187,26 @@ impl Codec {
         finish(&self.queue)?;
 
         Ok(output)
+    }
+
+    fn validate_or_allocate_buffer<T: OclPrm>(
+        context: &Context,
+        buffer: &mut Option<CachedBuffer>,
+        buffer_size: usize,
+        flags: MemFlags,
+    ) -> Result<Mem> {
+        if let Some(cached_buffer) = buffer {
+            if cached_buffer.buffer_size == buffer_size {
+                return Ok(cached_buffer.mem.clone());
+            }
+        }
+
+        let mem = unsafe { create_buffer(context, flags, buffer_size, None::<&[T]>)? };
+        buffer.replace({
+            let mem = mem.clone();
+            CachedBuffer { mem, buffer_size }
+        });
+
+        Ok(mem)
     }
 }
