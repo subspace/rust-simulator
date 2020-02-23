@@ -210,3 +210,30 @@ impl Codec {
         Ok(mem)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{aes_open_cl, aes_soft};
+
+    #[test]
+    fn test_aes_256_enc_iterations() {
+        let mut codec = Codec::new().unwrap();
+
+        let key = vec![
+            210, 51, 245, 243, 109, 154, 58, 127, 99, 229, 195, 34, 103, 170, 183, 16, 61, 83, 196,
+            156, 124, 20, 16, 161, 3, 25, 180, 170, 26, 19, 163, 12,
+        ];
+        let input = vec![
+            206, 213, 196, 136, 255, 138, 90, 170, 236, 76, 241, 48, 122, 18, 42, 189,
+        ];
+        let correct_ciphertext = vec![
+            198, 231, 185, 165, 170, 131, 90, 185, 16, 84, 179, 249, 244, 131, 233, 183,
+        ];
+        let mut keys = [0u32; 60];
+        aes_soft::setkey_enc_k256(&key, &mut keys);
+
+        let ciphertext = codec.aes_256_enc_iterations(&input, &keys, 1).unwrap();
+        assert_eq!(correct_ciphertext, ciphertext);
+    }
+}

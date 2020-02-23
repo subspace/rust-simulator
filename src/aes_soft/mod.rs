@@ -402,41 +402,6 @@ macro_rules! setkey_256_function {
 /// Set **256**bit working keys for **encryption**.
 ///
 /// **\[Attention!\]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
-/// # Examples
-/// ```
-/// use aes_frast::aes_core::setkey_enc_k256;
-///
-/// let origin: [u8; 32] = [
-///     0x60, 0x3D, 0xEB, 0x10, 0x15, 0xCA, 0x71, 0xBE,
-///     0x2B, 0x73, 0xAE, 0xF0, 0x85, 0x7D, 0x77, 0x81,
-///     0x1F, 0x35, 0x2C, 0x07, 0x3B, 0x61, 0x08, 0xD7,
-///     0x2D, 0x98, 0x10, 0xA3, 0x09, 0x14, 0xDF, 0xF4
-/// ];
-/// let mut output: [u32; 60] = [0; 60];
-///
-/// setkey_enc_k256(&origin, &mut output);
-///
-/// let expected: [u32; 60] = [
-///     0x603DEB10, 0x15CA71BE, 0x2B73AEF0, 0x857D7781,
-///     0x1F352C07, 0x3B6108D7, 0x2D9810A3, 0x0914DFF4,
-///     0x9BA35411, 0x8E6925AF, 0xA51A8B5F, 0x2067FCDE,
-///     0xA8B09C1A, 0x93D194CD, 0xBE49846E, 0xB75D5B9A,
-///     0xD59AECB8, 0x5BF3C917, 0xFEE94248, 0xDE8EBE96,
-///     0xB5A9328A, 0x2678A647, 0x98312229, 0x2F6C79B3,
-///     0x812C81AD, 0xDADF48BA, 0x24360AF2, 0xFAB8B464,
-///     0x98C5BFC9, 0xBEBD198E, 0x268C3BA7, 0x09E04214,
-///     0x68007BAC, 0xB2DF3316, 0x96E939E4, 0x6C518D80,
-///     0xC814E204, 0x76A9FB8A, 0x5025C02D, 0x59C58239,
-///     0xDE136967, 0x6CCC5A71, 0xFA256395, 0x9674EE15,
-///     0x5886CA5D, 0x2E2F31D7, 0x7E0AF1FA, 0x27CF73C3,
-///     0x749C47AB, 0x18501DDA, 0xE2757E4F, 0x7401905A,
-///     0xCAFAAAE3, 0xE4D59B34, 0x9ADF6ACE, 0xBD10190D,
-///     0xFE4890D1, 0xE6188D0B, 0x046DF344, 0x706C631E
-/// ];
-/// for i in 0..60 {
-///     assert_eq!(output[i], expected[i]);
-/// }
-/// ```
 pub fn setkey_enc_k256(origin: &[u8], keys: &mut [u32]) {
     setkey_256_function!(origin, keys);
 }
@@ -455,10 +420,6 @@ macro_rules! dkey_mixcolumn {
 /// Set **256**bit working keys for **decryption**.
 ///
 /// **\[Attention!\]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
-/// # Examples
-/// Please refer to [`setkey_enc_k256`] function, they are very similar but differ in the outputs.
-///
-/// [`setkey_enc_k256`]: ../aes_core/fn.setkey_enc_k256.html
 pub fn setkey_dec_k256(origin: &[u8], keys: &mut [u32]) {
     setkey_256_function!(origin, keys);
     dkey_mixcolumn!(keys, 60);
@@ -563,34 +524,6 @@ macro_rules! encryption_function {
 /// **Encrypt** a block with scheduled keys (from **256bit key**).
 ///
 /// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
-/// # Examples
-/// ```
-/// use aes_frast::aes_core::{setkey_enc_k256, block_enc_k256};
-///
-/// let input: [u8; 16] = [
-///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
-/// ];
-/// let origin_key: [u8; 32] = [
-///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-///     0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
-/// ];
-/// let mut scheduled_keys: [u32; 60] = [0; 60];
-/// let mut output: [u8; 16] = [0; 16];
-///
-/// setkey_enc_k256(&origin_key, &mut scheduled_keys);
-/// block_enc_k256(&input, &mut output, &scheduled_keys);
-///
-/// let expected: [u8; 16] = [
-///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
-///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89
-/// ];
-/// for i in 0..16 {
-///     assert_eq!(output[i], expected[i]);
-/// }
-/// ```
 pub fn block_enc_k256(input: &[u8], output: &mut [u8], keys: &[u32]) {
     encryption_function!(input, output, keys, 7, 60);
 }
@@ -697,34 +630,6 @@ macro_rules! decryption_function {
 /// **Decrypt** a block with scheduled keys (from **256bit key**).
 ///
 /// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
-/// # Examples
-/// ```
-/// use aes_frast::aes_core::{setkey_dec_k256, block_dec_k256};
-///
-/// let input: [u8; 16] = [
-///     0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
-///     0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89
-/// ];
-/// let origin_key: [u8; 32] = [
-///     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-///     0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-///     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-///     0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
-/// ];
-/// let mut scheduled_keys: [u32; 60] = [0; 60];
-/// let mut output: [u8; 16] = [0; 16];
-///
-/// setkey_dec_k256(&origin_key, &mut scheduled_keys);
-/// block_dec_k256(&input, &mut output, &scheduled_keys);
-///
-/// let expected: [u8; 16] = [
-///     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-///     0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF
-/// ];
-/// for i in 0..16 {
-///     assert_eq!(output[i], expected[i]);
-/// }
-/// ```
 pub fn block_dec_k256(input: &[u8], output: &mut [u8], keys: &[u32]) {
     decryption_function!(input, output, keys, 7, 60);
 }
