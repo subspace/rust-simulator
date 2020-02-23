@@ -21,8 +21,7 @@ struct CachedBuffer {
 }
 
 pub struct Codec {
-    buffer_in: Option<CachedBuffer>,
-    buffer_out: Option<CachedBuffer>,
+    buffer_state: Option<CachedBuffer>,
     buffer_round_keys: Mem,
     context: Context,
     // decrypt_kernel: Kernel,
@@ -60,16 +59,14 @@ impl Codec {
 
         set_kernel_arg(
             &aes_256_enc_iterations_kernel,
-            2,
+            1,
             ArgVal::mem(&buffer_round_keys),
         )?;
         // set_kernel_arg(&decrypt_kernel, 2, ArgVal::mem(&buffer_round_keys))?;
 
-        let buffer_in = Default::default();
-        let buffer_out = Default::default();
+        let buffer_state = Default::default();
         Ok(Self {
-            buffer_in,
-            buffer_out,
+            buffer_state,
             buffer_round_keys,
             context,
             // decrypt_kernel,
@@ -88,53 +85,40 @@ impl Codec {
     ) -> Result<Vec<u8>> {
         assert_eq!(input.len() % BLOCK_SIZE, 0);
 
-        let buffer_in = Self::validate_or_allocate_buffer::<Uchar16>(
+        let buffer_state = Self::validate_or_allocate_buffer::<Uchar16>(
             &self.context,
-            &mut self.buffer_in,
+            &mut self.buffer_state,
             input.len(),
-            flags::MEM_READ_ONLY | flags::MEM_ALLOC_HOST_PTR,
-        )?;
-        let buffer_out = Self::validate_or_allocate_buffer::<Uchar16>(
-            &self.context,
-            &mut self.buffer_out,
-            input.len(),
-            flags::MEM_WRITE_ONLY | flags::MEM_ALLOC_HOST_PTR,
+            flags::MEM_READ_WRITE | flags::MEM_ALLOC_HOST_PTR,
         )?;
 
         // TODO: Set these to `null` afterwards?
         set_kernel_arg(
             &self.aes_256_enc_iterations_kernel,
             0,
-            ArgVal::mem(&buffer_in),
+            ArgVal::mem(&buffer_state),
         )?;
         set_kernel_arg(
             &self.aes_256_enc_iterations_kernel,
-            1,
-            ArgVal::mem(&buffer_out),
-        )?;
-        set_kernel_arg(
-            &self.aes_256_enc_iterations_kernel,
-            3,
+            2,
             ArgVal::scalar(&iterations),
         )?;
 
         {
-            let mut event = Event::null();
             unsafe {
                 enqueue_write_buffer(
                     &self.queue,
-                    &buffer_in,
+                    &buffer_state,
                     true,
                     0,
                     &utils::u8_slice_to_uchar16_vec(input),
                     None::<Event>,
-                    Some(&mut event),
+                    None::<&mut Event>,
                 )?;
             }
         }
 
         {
-            let mut event = Event::null();
             unsafe {
                 enqueue_write_buffer(
                     &self.queue,
@@ -143,7 +127,7 @@ impl Codec {
                     0,
                     &utils::u32_slice_to_uint_vec(keys),
                     None::<Event>,
-                    Some(&mut event),
+                    None::<&mut Event>,
                 )?;
             }
         }
@@ -166,18 +150,17 @@ impl Codec {
 
         let mut output = Vec::<u8>::with_capacity(input.len());
         {
-            let mut event = Event::null();
             let mut result = Uchar16::from([0u8; BLOCK_SIZE]);
             for offset in (0..input.len()).step_by(BLOCK_SIZE) {
                 unsafe {
                     enqueue_read_buffer(
                         &self.queue,
-                        &buffer_out,
+                        &buffer_state,
                         true,
                         offset,
                         &mut result,
                         None::<Event>,
-                        Some(&mut event),
+                        None::<&mut Event>,
                     )?;
                 }
                 output.extend_from_slice(&result);
@@ -229,6 +212,24 @@ mod tests {
         ];
         let correct_ciphertext = vec![
             198, 231, 185, 165, 170, 131, 90, 185, 16, 84, 179, 249, 244, 131, 233, 183,
+        ];
+        let mut keys = [0u32; 60];
+        aes_soft::setkey_enc_k256(&key, &mut keys);
+
+        let ciphertext = codec.aes_256_enc_iterations(&input, &keys, 1).unwrap();
+        assert_eq!(correct_ciphertext, ciphertext);
+
+        let key = vec![
+            210, 51, 245, 243, 109, 154, 58, 127, 99, 229, 195, 34, 103, 170, 183, 16, 61, 83, 196,
+            156, 124, 20, 16, 161, 3, 25, 180, 170, 26, 19, 163, 12,
+        ];
+        let input = vec![
+            206, 213, 196, 136, 255, 138, 90, 170, 236, 76, 241, 48, 122, 18, 42, 189, 206, 213,
+            196, 136, 255, 138, 90, 170, 236, 76, 241, 48, 122, 18, 42, 189,
+        ];
+        let correct_ciphertext = vec![
+            198, 231, 185, 165, 170, 131, 90, 185, 16, 84, 179, 249, 244, 131, 233, 183, 198, 231,
+            185, 165, 170, 131, 90, 185, 16, 84, 179, 249, 244, 131, 233, 183,
         ];
         let mut keys = [0u32; 60];
         aes_soft::setkey_enc_k256(&key, &mut keys);

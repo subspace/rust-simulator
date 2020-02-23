@@ -323,35 +323,32 @@ __constant uint TD3[256] = {
 };
 
 inline void aes_256_enc(
-	const uchar16* input,
-	uchar16* output,
-	const uint* keys
+	__global uchar16* state,
+	__constant const uint* keys
 ) {
-    uint gid = get_global_id(0);
-
     uint wa0 = (
-        ((uint)input[gid][0] << 24)
-        ^ ((uint)input[gid][1] << 16)
-        ^ ((uint)input[gid][2] << 8)
-        ^ (uint)input[gid][3]
+        ((uint)(*state)[0] << 24)
+        ^ ((uint)(*state)[1] << 16)
+        ^ ((uint)(*state)[2] << 8)
+        ^ (uint)(*state)[3]
     ) ^ keys[0];
     uint wa1 = (
-        ((uint)input[gid][4] << 24)
-        ^ ((uint)input[gid][5] << 16)
-        ^ ((uint)input[gid][6] << 8)
-        ^ (uint)input[gid][7]
+        ((uint)(*state)[4] << 24)
+        ^ ((uint)(*state)[5] << 16)
+        ^ ((uint)(*state)[6] << 8)
+        ^ (uint)(*state)[7]
     ) ^ keys[1];
     uint wa2 = (
-        ((uint)input[gid][8] << 24)
-        ^ ((uint)input[gid][9] << 16)
-        ^ ((uint)input[gid][10] << 8)
-        ^ (uint)input[gid][11]
+        ((uint)(*state)[8] << 24)
+        ^ ((uint)(*state)[9] << 16)
+        ^ ((uint)(*state)[10] << 8)
+        ^ (uint)(*state)[11]
     ) ^ keys[2];
     uint wa3 = (
-        ((uint)input[gid][12] << 24)
-        ^ ((uint)input[gid][13] << 16)
-        ^ ((uint)input[gid][14] << 8)
-        ^ (uint)input[gid][15]
+        ((uint)(*state)[12] << 24)
+        ^ ((uint)(*state)[13] << 16)
+        ^ ((uint)(*state)[14] << 8)
+        ^ (uint)(*state)[15]
     ) ^ keys[3];
 
     uint wb0 = TE0[(size_t)(wa0 >> 24)]
@@ -417,22 +414,22 @@ inline void aes_256_enc(
             ^ TE3[(size_t)wa2 & 0xFF]
             ^ keys[8 * i + 7];
     }
-    output[gid][0] = SBOX[(size_t)(wb0 >> 24)] ^ (uchar)(keys[60 - 4] >> 24);
-    output[gid][1] = SBOX[(size_t)(wb1 >> 16) & 0xFF] ^ (uchar)(keys[60 - 4] >> 16);
-    output[gid][2] = SBOX[(size_t)(wb2 >> 8) & 0xFF] ^ (uchar)(keys[60 - 4] >> 8);
-    output[gid][3] = SBOX[(size_t)wb3 & 0xFF] ^ (uchar)keys[60 - 4];
-    output[gid][4] = SBOX[(size_t)(wb1 >> 24)] ^ (uchar)(keys[60 - 3] >> 24);
-    output[gid][5] = SBOX[(size_t)(wb2 >> 16) & 0xFF] ^ (uchar)(keys[60 - 3] >> 16);
-    output[gid][6] = SBOX[(size_t)(wb3 >> 8) & 0xFF] ^ (uchar)(keys[60 - 3] >> 8);
-    output[gid][7] = SBOX[(size_t)wb0 & 0xFF] ^ (uchar)keys[60 - 3];
-    output[gid][8] = SBOX[(size_t)(wb2 >> 24)] ^ (uchar)(keys[60 - 2] >> 24);
-    output[gid][9] = SBOX[(size_t)(wb3 >> 16) & 0xFF] ^ (uchar)(keys[60 - 2] >> 16);
-    output[gid][10] = SBOX[(size_t)(wb0 >> 8) & 0xFF] ^ (uchar)(keys[60 - 2] >> 8);
-    output[gid][11] = SBOX[(size_t)wb1 & 0xFF] ^ (uchar)keys[60 - 2];
-    output[gid][12] = SBOX[(size_t)(wb3 >> 24)] ^ (uchar)(keys[60 - 1] >> 24);
-    output[gid][13] = SBOX[(size_t)(wb0 >> 16) & 0xFF] ^ (uchar)(keys[60 - 1] >> 16);
-    output[gid][14] = SBOX[(size_t)(wb1 >> 8) & 0xFF] ^ (uchar)(keys[60 - 1] >> 8);
-    output[gid][15] = SBOX[(size_t)wb2 & 0xFF] ^ (uchar)keys[60 - 1];
+    (*state)[0] = SBOX[(size_t)(wb0 >> 24)] ^ (uchar)(keys[60 - 4] >> 24);
+    (*state)[1] = SBOX[(size_t)(wb1 >> 16) & 0xFF] ^ (uchar)(keys[60 - 4] >> 16);
+    (*state)[2] = SBOX[(size_t)(wb2 >> 8) & 0xFF] ^ (uchar)(keys[60 - 4] >> 8);
+    (*state)[3] = SBOX[(size_t)wb3 & 0xFF] ^ (uchar)keys[60 - 4];
+    (*state)[4] = SBOX[(size_t)(wb1 >> 24)] ^ (uchar)(keys[60 - 3] >> 24);
+    (*state)[5] = SBOX[(size_t)(wb2 >> 16) & 0xFF] ^ (uchar)(keys[60 - 3] >> 16);
+    (*state)[6] = SBOX[(size_t)(wb3 >> 8) & 0xFF] ^ (uchar)(keys[60 - 3] >> 8);
+    (*state)[7] = SBOX[(size_t)wb0 & 0xFF] ^ (uchar)keys[60 - 3];
+    (*state)[8] = SBOX[(size_t)(wb2 >> 24)] ^ (uchar)(keys[60 - 2] >> 24);
+    (*state)[9] = SBOX[(size_t)(wb3 >> 16) & 0xFF] ^ (uchar)(keys[60 - 2] >> 16);
+    (*state)[10] = SBOX[(size_t)(wb0 >> 8) & 0xFF] ^ (uchar)(keys[60 - 2] >> 8);
+    (*state)[11] = SBOX[(size_t)wb1 & 0xFF] ^ (uchar)keys[60 - 2];
+    (*state)[12] = SBOX[(size_t)(wb3 >> 24)] ^ (uchar)(keys[60 - 1] >> 24);
+    (*state)[13] = SBOX[(size_t)(wb0 >> 16) & 0xFF] ^ (uchar)(keys[60 - 1] >> 16);
+    (*state)[14] = SBOX[(size_t)(wb1 >> 8) & 0xFF] ^ (uchar)(keys[60 - 1] >> 8);
+    (*state)[15] = SBOX[(size_t)wb2 & 0xFF] ^ (uchar)keys[60 - 1];
 }
 
 inline void aes_256_dec(
@@ -551,22 +548,13 @@ inline void aes_256_dec(
 }
 
 __kernel void aes_256_enc_iterations(
-	__global const uchar16* input,
-	__global uchar16* output,
+	__global uchar16* state,
 	__constant const uint* keys,
 	const uint iterations
 ) {
-    uchar16 local_input;
-    uchar16 local_output;
-    uint local_keys;
-
-    local_input = *input;
-    local_keys = *keys;
+    uint gid = get_global_id(0);
 
     for (uint i = 0; i < iterations; ++i) {
-        aes_256_enc(&local_input, &local_output, &local_keys);
-        local_input = local_output;
+        aes_256_enc(&state[gid], keys);
     }
-
-    *output = local_output;
 }
