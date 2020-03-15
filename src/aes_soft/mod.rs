@@ -446,6 +446,10 @@ pub fn setkey_dec_k256(origin: &[u8], keys: &mut [u32]) {
     setkey_256_function!(origin, keys);
     dkey_mixcolumn!(keys, 60);
 }
+pub fn setkey_dec_k128(origin: &[u8], keys: &mut [u32]) {
+    setkey_128_function!(origin, keys);
+    dkey_mixcolumn!(keys, 44);
+}
 // Encrypt a block.
 macro_rules! encryption_function {
     ($input:ident, $output:ident, $keys:ident, $inner_rounds:expr, $keys_length:expr) => {
@@ -657,4 +661,7 @@ macro_rules! decryption_function {
 /// **\[Attention!\]** The **1st and 2nd parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
 pub fn block_dec_k256(input: &[u8], output: &mut [u8], keys: &[u32]) {
     decryption_function!(input, output, keys, 7, 60);
+}
+pub fn block_dec_k128(input: &[u8], output: &mut [u8], keys: &[u32]) {
+    decryption_function!(input, output, keys, 5, 44);
 }

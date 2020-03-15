@@ -657,6 +657,118 @@ inline void aes_256_dec(
     output[gid][15] = SINV[(size_t)wb0 & 0xFF] ^ (uchar)keys[3];
 }
 
+inline void aes_128_dec(
+	__global uchar16* state,
+	__constant const uint* keys
+) {
+    uint wa0 = (
+        ((uint)(*state)[0] << 24)
+        ^ ((uint)(*state)[1] << 16)
+        ^ ((uint)(*state)[2] << 8)
+        ^ (uint)(*state)[3]
+    ) ^ keys[44 - 4];
+    uint wa1 = (
+        ((uint)(*state)[4] << 24)
+        ^ ((uint)(*state)[5] << 16)
+        ^ ((uint)(*state)[6] << 8)
+        ^ (uint)(*state)[7]
+    ) ^ keys[44 - 3];
+    uint wa2 = (
+        ((uint)(*state)[8] << 24)
+        ^ ((uint)(*state)[9] << 16)
+        ^ ((uint)(*state)[10] << 8)
+        ^ (uint)(*state)[11]
+    ) ^ keys[44 - 2];
+    uint wa3 = (
+        ((uint)(*state)[12] << 24)
+        ^ ((uint)(*state)[13] << 16)
+        ^ ((uint)(*state)[14] << 8)
+        ^ (uint)(*state)[15]
+    ) ^ keys[44 - 1];
+
+    uint wb0 = TD0[(size_t)(wa0 >> 24)]
+        ^ TD1[(size_t)(wa3 >> 16) & 0xFF]
+        ^ TD2[(size_t)(wa2 >> 8) & 0xFF]
+        ^ TD3[(size_t)wa1 & 0xFF]
+        ^ keys[44 - 8];
+    uint wb1 = TD0[(size_t)(wa1 >> 24)]
+        ^ TD1[(size_t)(wa0 >> 16) & 0xFF]
+        ^ TD2[(size_t)(wa3 >> 8) & 0xFF]
+        ^ TD3[(size_t)wa2 & 0xFF]
+        ^ keys[44 - 7];
+    uint wb2 = TD0[(size_t)(wa2 >> 24)]
+        ^ TD1[(size_t)(wa1 >> 16) & 0xFF]
+        ^ TD2[(size_t)(wa0 >> 8) & 0xFF]
+        ^ TD3[(size_t)wa3 & 0xFF]
+        ^ keys[44 - 6];
+    uint wb3 = TD0[(size_t)(wa3 >> 24)]
+        ^ TD1[(size_t)(wa2 >> 16) & 0xFF]
+        ^ TD2[(size_t)(wa1 >> 8) & 0xFF]
+        ^ TD3[(size_t)wa0 & 0xFF]
+        ^ keys[44 - 5];
+
+    for (uint i = 1; i < 5; i++) {
+        wa0 = TD0[(size_t)(wb0 >> 24)]
+            ^ TD1[(size_t)(wb3 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wb2 >> 8) & 0xFF]
+            ^ TD3[(size_t)wb1 & 0xFF]
+            ^ keys[44 - 4 - (8 * i)];
+        wa1 = TD0[(size_t)(wb1 >> 24)]
+            ^ TD1[(size_t)(wb0 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wb3 >> 8) & 0xFF]
+            ^ TD3[(size_t)wb2 & 0xFF]
+            ^ keys[44 - 3 - (8 * i)];
+        wa2 = TD0[(size_t)(wb2 >> 24)]
+            ^ TD1[(size_t)(wb1 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wb0 >> 8) & 0xFF]
+            ^ TD3[(size_t)wb3 & 0xFF]
+            ^ keys[44 - 2 - (8 * i)];
+        wa3 = TD0[(size_t)(wb3 >> 24)]
+            ^ TD1[(size_t)(wb2 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wb1 >> 8) & 0xFF]
+            ^ TD3[(size_t)wb0 & 0xFF]
+            ^ keys[44 - 1 - (8 * i)];
+
+        wb0 = TD0[(size_t)(wa0 >> 24)]
+            ^ TD1[(size_t)(wa3 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wa2 >> 8) & 0xFF]
+            ^ TD3[(size_t)wa1 & 0xFF]
+            ^ keys[44 - 8 - (8 * i)];
+        wb1 = TD0[(size_t)(wa1 >> 24)]
+            ^ TD1[(size_t)(wa0 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wa3 >> 8) & 0xFF]
+            ^ TD3[(size_t)wa2 & 0xFF]
+            ^ keys[44 - 7 - (8 * i)];
+        wb2 = TD0[(size_t)(wa2 >> 24)]
+            ^ TD1[(size_t)(wa1 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wa0 >> 8) & 0xFF]
+            ^ TD3[(size_t)wa3 & 0xFF]
+            ^ keys[44 - 6 - (8 * i)];
+        wb3 = TD0[(size_t)(wa3 >> 24)]
+            ^ TD1[(size_t)(wa2 >> 16) & 0xFF]
+            ^ TD2[(size_t)(wa1 >> 8) & 0xFF]
+            ^ TD3[(size_t)wa0 & 0xFF]
+            ^ keys[44 - 5 - (8 * i)];
+    }
+
+    (*state)[0] = SINV[(size_t)(wb0 >> 24)] ^ (uchar)(keys[0] >> 24);
+    (*state)[1] = SINV[(size_t)(wb3 >> 16) & 0xFF] ^ (uchar)(keys[0] >> 16);
+    (*state)[2] = SINV[(size_t)(wb2 >> 8) & 0xFF] ^ (uchar)(keys[0] >> 8);
+    (*state)[3] = SINV[(size_t)wb1 & 0xFF] ^ (uchar)keys[0];
+    (*state)[4] = SINV[(size_t)(wb1 >> 24)] ^ (uchar)(keys[1] >> 24);
+    (*state)[5] = SINV[(size_t)(wb0 >> 16) & 0xFF] ^ (uchar)(keys[1] >> 16);
+    (*state)[6] = SINV[(size_t)(wb3 >> 8) & 0xFF] ^ (uchar)(keys[1] >> 8);
+    (*state)[7] = SINV[(size_t)wb2 & 0xFF] ^ (uchar)keys[1];
+    (*state)[8] = SINV[(size_t)(wb2 >> 24)] ^ (uchar)(keys[2] >> 24);
+    (*state)[9] = SINV[(size_t)(wb1 >> 16) & 0xFF] ^ (uchar)(keys[2] >> 16);
+    (*state)[10] = SINV[(size_t)(wb0 >> 8) & 0xFF] ^ (uchar)(keys[2] >> 8);
+    (*state)[11] = SINV[(size_t)wb3 & 0xFF] ^ (uchar)keys[2];
+    (*state)[12] = SINV[(size_t)(wb3 >> 24)] ^ (uchar)(keys[3] >> 24);
+    (*state)[13] = SINV[(size_t)(wb2 >> 16) & 0xFF] ^ (uchar)(keys[3] >> 16);
+    (*state)[14] = SINV[(size_t)(wb1 >> 8) & 0xFF] ^ (uchar)(keys[3] >> 8);
+    (*state)[15] = SINV[(size_t)wb0 & 0xFF] ^ (uchar)keys[3];
+}
+
 __kernel void aes_256_enc_iterations(
 	__global uchar16* state,
 	__constant const uint* keys,
@@ -692,7 +804,7 @@ inline void por_128_enc_inner(
     // XOR the first block with IV
     state[0] ^= iv;
 
-    // Apply Rijndael cipher for the first block necessary number or times
+    // Apply Rijndael cipher to the first block necessary number or times
     for (uint r = 0; r < rounds; ++r) {
         aes_128_enc(state, keys);
     }
@@ -701,6 +813,7 @@ inline void por_128_enc_inner(
         // XOR feedback into next current block
         state[block] ^= state[block - 1];
 
+        // Apply Rijndael cipher to each block necessary number or times
         for (uint r = 0; r < rounds; ++r) {
             aes_128_enc(&state[block], keys);
         }
@@ -715,4 +828,38 @@ __kernel void por_128_enc(
     uint gid = get_global_id(0);
 
     por_128_enc_inner(&state[gid * blocks_per_piece], iv[gid], keys);
+}
+
+inline void por_128_dec_inner(
+	__global uchar16* state,
+	const uchar16 iv,
+	__constant const uint* keys
+) {
+    for (uint block = blocks_per_piece - 1; block > 0; --block) {
+        // Apply Rijndael decipher to each block necessary number or times
+        for (uint r = 0; r < rounds; ++r) {
+            aes_128_dec(&state[block], keys);
+        }
+
+        // XOR feedback into next current block
+        state[block] ^= state[block - 1];
+    }
+
+    // Apply Rijndael decipher to the first block necessary number or times
+    for (uint r = 0; r < rounds; ++r) {
+        aes_128_dec(state, keys);
+    }
+
+    // XOR the first block with IV
+    state[0] ^= iv;
+}
+
+__kernel void por_128_dec(
+	__global uchar16* state,
+	__constant const uchar16* iv,
+	__constant const uint* keys
+) {
+    uint gid = get_global_id(0);
+
+    por_128_dec_inner(&state[gid * blocks_per_piece], iv[gid], keys);
 }

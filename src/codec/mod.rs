@@ -31,6 +31,7 @@ pub struct Codec {
     aes_128_enc_iterations_kernel: Kernel,
     aes_256_enc_iterations_kernel: Kernel,
     por_128_enc_kernel: Kernel,
+    por_128_dec_kernel: Kernel,
     queue: CommandQueue,
 }
 
@@ -53,6 +54,7 @@ impl Codec {
         let aes_128_enc_iterations_kernel = create_kernel(&program, "aes_128_enc_iterations")?;
         let aes_256_enc_iterations_kernel = create_kernel(&program, "aes_256_enc_iterations")?;
         let por_128_enc_kernel = create_kernel(&program, "por_128_enc")?;
+        let por_128_dec_kernel = create_kernel(&program, "por_128_dec")?;
         // let decrypt_kernel = create_kernel(&program, "aes_256_dec")?;
 
         let buffer_round_keys = unsafe {
@@ -75,6 +77,7 @@ impl Codec {
             ArgVal::mem(&buffer_round_keys),
         )?;
         set_kernel_arg(&por_128_enc_kernel, 2, ArgVal::mem(&buffer_round_keys))?;
+        set_kernel_arg(&por_128_dec_kernel, 2, ArgVal::mem(&buffer_round_keys))?;
         // set_kernel_arg(&decrypt_kernel, 2, ArgVal::mem(&buffer_round_keys))?;
 
         let buffer_state = Default::default();
@@ -88,6 +91,7 @@ impl Codec {
             aes_128_enc_iterations_kernel,
             aes_256_enc_iterations_kernel,
             por_128_enc_kernel,
+            por_128_dec_kernel,
             queue,
         })
     }
@@ -398,6 +402,118 @@ impl Codec {
         Ok(output)
     }
 
+    /// Takes ciphertext input that is multiple of piece size (4096 bytes), same number of IVs and
+    /// expanded round keys
+    ///
+    /// Produces plaintext
+    pub fn por_128_dec(
+        &mut self,
+        input: &[u8],
+        ivs: &[u128],
+        keys: &[u32; ROUND_KEYS_LENGTH_128],
+    ) -> Result<Vec<u8>> {
+        assert_eq!(input.len() % PIECE_SIZE, 0);
+
+        let blocks_count = input.len() / PIECE_SIZE;
+        assert_eq!(blocks_count, ivs.len());
+
+        let buffer_state = Self::validate_or_allocate_buffer::<Uchar16>(
+            &self.context,
+            &mut self.buffer_state,
+            input.len(),
+            flags::MEM_READ_WRITE | flags::MEM_ALLOC_HOST_PTR,
+        )?;
+
+        let buffer_ivs = Self::validate_or_allocate_buffer::<Uchar16>(
+            &self.context,
+            &mut self.buffer_iv,
+            ivs.len(),
+            flags::MEM_READ_WRITE | flags::MEM_ALLOC_HOST_PTR,
+        )?;
+
+        set_kernel_arg(&self.por_128_dec_kernel, 0, ArgVal::mem(&buffer_state))?;
+        set_kernel_arg(&self.por_128_dec_kernel, 1, ArgVal::mem(&buffer_ivs))?;
+
+        {
+            unsafe {
+                enqueue_write_buffer(
+                    &self.queue,
+                    &buffer_state,
+                    true,
+                    0,
+                    &utils::u8_slice_to_uchar16_vec(input),
+                    None::<Event>,
+                    None::<&mut Event>,
+                )?;
+            }
+        }
+
+        {
+            unsafe {
+                enqueue_write_buffer(
+                    &self.queue,
+                    &buffer_ivs,
+                    true,
+                    0,
+                    &utils::u128_slice_to_uchar16_vec(ivs),
+                    None::<Event>,
+                    None::<&mut Event>,
+                )?;
+            }
+        }
+
+        {
+            unsafe {
+                enqueue_write_buffer(
+                    &self.queue,
+                    &self.buffer_round_keys,
+                    true,
+                    0,
+                    &utils::u32_slice_to_uint_vec(keys),
+                    None::<Event>,
+                    None::<&mut Event>,
+                )?;
+            }
+        }
+
+        unsafe {
+            enqueue_kernel(
+                &self.queue,
+                &self.por_128_dec_kernel,
+                1,
+                None,
+                // TODO: This will not handle too big inputs that exceed VRAM
+                &[blocks_count, 0, 0],
+                None,
+                None::<Event>,
+                None::<&mut Event>,
+            )
+        }?;
+
+        let mut output = Vec::<u8>::with_capacity(input.len());
+        {
+            let mut result = Uchar16::from([0u8; BLOCK_SIZE]);
+            for offset in (0..input.len()).step_by(BLOCK_SIZE) {
+                unsafe {
+                    enqueue_read_buffer(
+                        &self.queue,
+                        &buffer_state,
+                        true,
+                        offset,
+                        &mut result,
+                        None::<Event>,
+                        None::<&mut Event>,
+                    )?;
+                }
+                output.extend_from_slice(&result);
+            }
+        }
+
+        finish(&self.queue)?;
+
+        Ok(output)
+    }
+
     fn validate_or_allocate_buffer<T: OclPrm>(
         context: &Context,
         buffer: &mut Option<CachedBuffer>,
@@ -427,7 +543,7 @@ mod tests {
     use crate::crypto;
 
     #[test]
-    fn test_aes_enc_iterations() {
+    fn test() {
         // AES-256
         let mut codec = Codec::new().unwrap();
 
@@ -505,20 +621,20 @@ mod tests {
         assert_eq!(correct_ciphertext, ciphertext);
 
         // PoR
-        let ivs = vec![13u128];
+        let iv = vec![13u128];
         let id = crypto::random_bytes_32();
         let input = crypto::random_bytes_4096();
         let correct_encryption =
-            crypto::por_encode_single_block_software(&input, &id, ivs[0] as usize).to_vec();
+            crypto::por_encode_single_block_software(&input, &id, iv[0] as usize).to_vec();
 
         let mut keys = [0u32; 44];
         aes_soft::setkey_enc_k128(&id, &mut keys);
 
-        let encryption = codec.por_128_enc(&input, &ivs, &keys).unwrap();
+        let encryption = codec.por_128_enc(&input, &iv, &keys).unwrap();
         assert_eq!(correct_encryption, encryption);
 
         let ivs = vec![13u128, 13u128];
-        let encryption = codec
+        let encryptions = codec
             .por_128_enc(
                 &(0..2)
                     .flat_map(|_| input.as_ref().to_vec())
@@ -529,9 +645,33 @@ mod tests {
             )
             .unwrap();
         assert_eq!(
-            encryption[..PIECE_SIZE].to_vec(),
-            encryption[PIECE_SIZE..].to_vec()
+            encryptions[..PIECE_SIZE].to_vec(),
+            encryptions[PIECE_SIZE..].to_vec()
         );
-        assert_eq!(correct_encryption, encryption[PIECE_SIZE..].to_vec());
+        assert_eq!(correct_encryption, encryptions[PIECE_SIZE..].to_vec());
+
+        // Simple test, unrelated, but I had to put it somewhere
+        assert_eq!(
+            input.to_vec(),
+            crypto::por_decode_single_block_software(
+                &crypto::por_encode_single_block_software(&input, &id, ivs[0] as usize),
+                &id,
+                ivs[0] as usize
+            )
+            .to_vec()
+        );
+
+        let mut keys = [0u32; 44];
+        aes_soft::setkey_dec_k128(&id, &mut keys);
+
+        let decryption = codec.por_128_dec(&encryption, &iv, &keys).unwrap();
+        assert_eq!(input.to_vec(), decryption);
+
+        let decryptions = codec.por_128_dec(&encryptions, &ivs, &keys).unwrap();
+        assert_eq!(
+            decryptions[..PIECE_SIZE].to_vec(),
+            decryptions[PIECE_SIZE..].to_vec()
+        );
+        assert_eq!(input.to_vec(), decryptions[PIECE_SIZE..].to_vec());
     }
 }

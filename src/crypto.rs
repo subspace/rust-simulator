@@ -417,6 +417,65 @@ pub fn decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -
     piece
 }
 
+pub fn por_decode_single_block_software(encoding: &Piece, id: &[u8], index: usize) -> Piece {
+    // setup the cipher
+    let iv = utils::usize_to_bytes(index);
+    let mut piece: Piece = [0u8; crate::PIECE_SIZE];
+    let mut keys = [0u32; 44];
+    aes_soft::setkey_dec_k128(&id, &mut keys);
+    let mut block_offset = 0;
+
+    let rounds = 256;
+
+    let mut block: GenericArray<u8, U16> =
+        GenericArray::clone_from_slice(&encoding[0..crate::BLOCK_SIZE]);
+
+    // apply inverse Rijndael cipher to each encoded block
+    for _ in 0..rounds {
+        let mut res = [0u8; 16];
+        aes_soft::block_dec_k128(&block, &mut res, &keys);
+        block.copy_from_slice(&res);
+    }
+
+    for i in 0..crate::BLOCK_SIZE {
+        block[i] ^= iv[i];
+    }
+
+    // copy block into encoding
+    for i in 0..crate::BLOCK_SIZE {
+        piece[i] = block[i];
+    }
+
+    block_offset += crate::BLOCK_SIZE;
+
+    for _ in 1..crate::BLOCKS_PER_PIECE {
+        block = GenericArray::clone_from_slice(
+            &encoding[block_offset..block_offset + crate::BLOCK_SIZE],
+        );
+
+        // apply inverse Rijndael cipher to each encoded block
+        for _ in 0..rounds {
+            let mut res = [0u8; 16];
+            aes_soft::block_dec_k128(&block, &mut res, &keys);
+            block.copy_from_slice(&res);
+        }
+
+        // xor with iv or previous encoded block to retrieve source block
+        let previous_block_offset = block_offset - crate::BLOCK_SIZE;
+        for i in 0..crate::BLOCK_SIZE {
+            block[i] ^= encoding[previous_block_offset + i];
+        }
+
+        // copy block into encoding
+        for i in 0..crate::BLOCK_SIZE {
+            piece[i + block_offset] = block[i];
+        }
+
+        block_offset += crate::BLOCK_SIZE;
+    }
+    piece
+}
+
 /// Decodes one block at a time for a single piece on a GPU
 pub fn decode_single_block_open_cl(encoding: &Piece, id: &[u8], index: usize) -> Piece {
     // setup the cipher
