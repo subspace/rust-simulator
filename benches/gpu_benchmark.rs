@@ -32,6 +32,24 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
+    let mut keys = [0u32; 44];
+    aes_soft::setkey_dec_k128(&id, &mut keys);
+    let encoding = crypto::por_encode_single_block_software(&piece, &id, iv[0] as usize).to_vec();
+
+    group.bench_function("PoR-128-decode-single", |b| {
+        b.iter(|| {
+            codec.por_128_dec(&encoding, &iv, &keys).unwrap();
+        })
+    });
+
+    let encodings: Vec<u8> = (0..100).flat_map(|_| encoding.to_vec()).collect();
+
+    group.bench_function("PoR-128-decode-100", |b| {
+        b.iter(|| {
+            codec.por_128_dec(&encodings, &ivs, &keys).unwrap();
+        })
+    });
+
     group.finish();
 }
 
