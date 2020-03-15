@@ -432,6 +432,116 @@ inline void aes_256_enc(
     (*state)[15] = SBOX[(size_t)wb2 & 0xFF] ^ (uchar)keys[60 - 1];
 }
 
+inline void aes_128_enc(
+	__global uchar16* state,
+	__constant const uint* keys
+) {
+    uint wa0 = (
+        ((uint)(*state)[0] << 24)
+        ^ ((uint)(*state)[1] << 16)
+        ^ ((uint)(*state)[2] << 8)
+        ^ (uint)(*state)[3]
+    ) ^ keys[0];
+    uint wa1 = (
+        ((uint)(*state)[4] << 24)
+        ^ ((uint)(*state)[5] << 16)
+        ^ ((uint)(*state)[6] << 8)
+        ^ (uint)(*state)[7]
+    ) ^ keys[1];
+    uint wa2 = (
+        ((uint)(*state)[8] << 24)
+        ^ ((uint)(*state)[9] << 16)
+        ^ ((uint)(*state)[10] << 8)
+        ^ (uint)(*state)[11]
+    ) ^ keys[2];
+    uint wa3 = (
+        ((uint)(*state)[12] << 24)
+        ^ ((uint)(*state)[13] << 16)
+        ^ ((uint)(*state)[14] << 8)
+        ^ (uint)(*state)[15]
+    ) ^ keys[3];
+
+    uint wb0 = TE0[(size_t)(wa0 >> 24)]
+        ^ TE1[(size_t)(wa1 >> 16) & 0xFF]
+        ^ TE2[(size_t)(wa2 >> 8) & 0xFF]
+        ^ TE3[(size_t)wa3 & 0xFF]
+        ^ keys[4];
+    uint wb1 = TE0[(size_t)(wa1 >> 24)]
+        ^ TE1[(size_t)(wa2 >> 16) & 0xFF]
+        ^ TE2[(size_t)(wa3 >> 8) & 0xFF]
+        ^ TE3[(size_t)wa0 & 0xFF]
+        ^ keys[5];
+    uint wb2 = TE0[(size_t)(wa2 >> 24)]
+        ^ TE1[(size_t)(wa3 >> 16) & 0xFF]
+        ^ TE2[(size_t)(wa0 >> 8) & 0xFF]
+        ^ TE3[(size_t)wa1 & 0xFF]
+        ^ keys[6];
+    uint wb3 = TE0[(size_t)(wa3 >> 24)]
+        ^ TE1[(size_t)(wa0 >> 16) & 0xFF]
+        ^ TE2[(size_t)(wa1 >> 8) & 0xFF]
+        ^ TE3[(size_t)wa2 & 0xFF]
+        ^ keys[7];
+    for (uint i = 1; i < 5; i++) {
+        wa0 = TE0[(size_t)(wb0 >> 24)]
+            ^ TE1[(size_t)(wb1 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wb2 >> 8) & 0xFF]
+            ^ TE3[(size_t)wb3 & 0xFF]
+            ^ keys[8 * i];
+        wa1 = TE0[(size_t)(wb1 >> 24)]
+            ^ TE1[(size_t)(wb2 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wb3 >> 8) & 0xFF]
+            ^ TE3[(size_t)wb0 & 0xFF]
+            ^ keys[8 * i + 1];
+        wa2 = TE0[(size_t)(wb2 >> 24)]
+            ^ TE1[(size_t)(wb3 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wb0 >> 8) & 0xFF]
+            ^ TE3[(size_t)wb1 & 0xFF]
+            ^ keys[8 * i + 2];
+        wa3 = TE0[(size_t)(wb3 >> 24)]
+            ^ TE1[(size_t)(wb0 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wb1 >> 8) & 0xFF]
+            ^ TE3[(size_t)wb2 & 0xFF]
+            ^ keys[8 * i + 3];
+
+        wb0 = TE0[(size_t)(wa0 >> 24)]
+            ^ TE1[(size_t)(wa1 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wa2 >> 8) & 0xFF]
+            ^ TE3[(size_t)wa3 & 0xFF]
+            ^ keys[8 * i + 4];
+        wb1 = TE0[(size_t)(wa1 >> 24)]
+            ^ TE1[(size_t)(wa2 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wa3 >> 8) & 0xFF]
+            ^ TE3[(size_t)wa0 & 0xFF]
+            ^ keys[8 * i + 5];
+        wb2 = TE0[(size_t)(wa2 >> 24)]
+            ^ TE1[(size_t)(wa3 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wa0 >> 8) & 0xFF]
+            ^ TE3[(size_t)wa1 & 0xFF]
+            ^ keys[8 * i + 6];
+        wb3 = TE0[(size_t)(wa3 >> 24)]
+            ^ TE1[(size_t)(wa0 >> 16) & 0xFF]
+            ^ TE2[(size_t)(wa1 >> 8) & 0xFF]
+            ^ TE3[(size_t)wa2 & 0xFF]
+            ^ keys[8 * i + 7];
+    }
+    (*state)[0] = SBOX[(size_t)(wb0 >> 24)] ^ (uchar)(keys[44 - 4] >> 24);
+    (*state)[1] = SBOX[(size_t)(wb1 >> 16) & 0xFF] ^ (uchar)(keys[44 - 4] >> 16);
+    (*state)[2] = SBOX[(size_t)(wb2 >> 8) & 0xFF] ^ (uchar)(keys[44 - 4] >> 8);
+    (*state)[3] = SBOX[(size_t)wb3 & 0xFF] ^ (uchar)keys[44 - 4];
+    (*state)[4] = SBOX[(size_t)(wb1 >> 24)] ^ (uchar)(keys[44 - 3] >> 24);
+    (*state)[5] = SBOX[(size_t)(wb2 >> 16) & 0xFF] ^ (uchar)(keys[44 - 3] >> 16);
+    (*state)[6] = SBOX[(size_t)(wb3 >> 8) & 0xFF] ^ (uchar)(keys[44 - 3] >> 8);
+    (*state)[7] = SBOX[(size_t)wb0 & 0xFF] ^ (uchar)keys[44 - 3];
+    (*state)[8] = SBOX[(size_t)(wb2 >> 24)] ^ (uchar)(keys[44 - 2] >> 24);
+    (*state)[9] = SBOX[(size_t)(wb3 >> 16) & 0xFF] ^ (uchar)(keys[44 - 2] >> 16);
+    (*state)[10] = SBOX[(size_t)(wb0 >> 8) & 0xFF] ^ (uchar)(keys[44 - 2] >> 8);
+    (*state)[11] = SBOX[(size_t)wb1 & 0xFF] ^ (uchar)keys[44 - 2];
+    (*state)[12] = SBOX[(size_t)(wb3 >> 24)] ^ (uchar)(keys[44 - 1] >> 24);
+    (*state)[13] = SBOX[(size_t)(wb0 >> 16) & 0xFF] ^ (uchar)(keys[44 - 1] >> 16);
+    (*state)[14] = SBOX[(size_t)(wb1 >> 8) & 0xFF] ^ (uchar)(keys[44 - 1] >> 8);
+    (*state)[15] = SBOX[(size_t)wb2 & 0xFF] ^ (uchar)keys[44 - 1];
+}
+
 inline void aes_256_dec(
 	__global uchar16* input,
 	__global uchar16* output,
@@ -556,5 +666,17 @@ __kernel void aes_256_enc_iterations(
 
     for (uint i = 0; i < iterations; ++i) {
         aes_256_enc(&state[gid], keys);
+    }
+}
+
+__kernel void aes_128_enc_iterations(
+	__global uchar16* state,
+	__constant const uint* keys,
+	const uint iterations
+) {
+    uint gid = get_global_id(0);
+
+    for (uint i = 0; i < iterations; ++i) {
+        aes_128_enc(&state[gid], keys);
     }
 }

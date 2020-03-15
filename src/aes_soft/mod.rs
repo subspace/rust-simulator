@@ -399,6 +399,28 @@ macro_rules! setkey_256_function {
         $keys[59] = $keys[51] ^ $keys[58];
     }};
 }
+// 128bit key schedule
+macro_rules! setkey_128_function {
+    ($origin:ident, $keys:ident) => {{
+        for i in 0..4 {
+            $keys[i] = four_u8_to_u32!(
+                $origin[4 * i],
+                $origin[4 * i + 1],
+                $origin[4 * i + 2],
+                $origin[4 * i + 3]
+            );
+        }
+        for i in 0..10 {
+            $keys[4 * i + 4] = $keys[4 * i] ^ round_g_function!($keys[4 * i + 3], i);
+            $keys[4 * i + 5] = $keys[4 * i + 1] ^ $keys[4 * i + 4];
+            $keys[4 * i + 6] = $keys[4 * i + 2] ^ $keys[4 * i + 5];
+            $keys[4 * i + 7] = $keys[4 * i + 3] ^ $keys[4 * i + 6];
+        }
+    }};
+}
+pub fn setkey_enc_k128(origin: &[u8], keys: &mut [u32]) {
+    setkey_128_function!(origin, keys);
+}
 /// Set **256**bit working keys for **encryption**.
 ///
 /// **\[Attention!\]** The **first parameter** must possess **32 elements** in the slice, and the **second** **60**.
@@ -526,6 +548,9 @@ macro_rules! encryption_function {
 /// **\[Attention!\]** The **first** and **second parameters** must possess **16 elements** **each** in the slice, and the **3rd** **60**.
 pub fn block_enc_k256(input: &[u8], output: &mut [u8], keys: &[u32]) {
     encryption_function!(input, output, keys, 7, 60);
+}
+pub fn block_enc_k128(input: &[u8], output: &mut [u8], keys: &[u32]) {
+    encryption_function!(input, output, keys, 5, 44);
 }
 // Decrypt a block.
 macro_rules! decryption_function {
