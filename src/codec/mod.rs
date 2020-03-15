@@ -1,5 +1,7 @@
 mod utils;
 
+use crate::BLOCK_SIZE;
+use crate::PIECE_SIZE;
 use ocl::{
     core::{
         build_program, create_buffer, create_command_queue, create_context, create_kernel,
@@ -14,7 +16,6 @@ use std::ffi::CString;
 const AES_OPEN_CL: &str = include_str!("codec.cl");
 const ROUND_KEYS_LENGTH_128: usize = 44;
 const ROUND_KEYS_LENGTH_256: usize = 60;
-const BLOCK_SIZE: usize = 16;
 
 struct CachedBuffer {
     mem: Mem,
@@ -23,11 +24,13 @@ struct CachedBuffer {
 
 pub struct Codec {
     buffer_state: Option<CachedBuffer>,
+    buffer_iv: Option<CachedBuffer>,
     buffer_round_keys: Mem,
     context: Context,
     // decrypt_kernel: Kernel,
     aes_128_enc_iterations_kernel: Kernel,
     aes_256_enc_iterations_kernel: Kernel,
+    por_128_enc_kernel: Kernel,
     queue: CommandQueue,
 }
 
@@ -49,6 +52,7 @@ impl Codec {
 
         let aes_128_enc_iterations_kernel = create_kernel(&program, "aes_128_enc_iterations")?;
         let aes_256_enc_iterations_kernel = create_kernel(&program, "aes_256_enc_iterations")?;
+        let por_128_enc_kernel = create_kernel(&program, "por_128_enc")?;
         // let decrypt_kernel = create_kernel(&program, "aes_256_dec")?;
 
         let buffer_round_keys = unsafe {
@@ -70,16 +74,20 @@ impl Codec {
             1,
             ArgVal::mem(&buffer_round_keys),
         )?;
+        set_kernel_arg(&por_128_enc_kernel, 2, ArgVal::mem(&buffer_round_keys))?;
         // set_kernel_arg(&decrypt_kernel, 2, ArgVal::mem(&buffer_round_keys))?;
 
         let buffer_state = Default::default();
+        let buffer_iv = Default::default();
         Ok(Self {
             buffer_state,
+            buffer_iv,
             buffer_round_keys,
             context,
             // decrypt_kernel,
             aes_128_enc_iterations_kernel,
             aes_256_enc_iterations_kernel,
+            por_128_enc_kernel,
             queue,
         })
     }
@@ -278,6 +286,118 @@ impl Codec {
         Ok(output)
     }
 
+    /// Takes plaintext input that is multiple of piece size (4096 bytes), same number of IVs and
+    /// expanded round keys
+    ///
+    /// Produces ciphertext
+    pub fn por_128_enc(
+        &mut self,
+        input: &[u8],
+        ivs: &[u128],
+        keys: &[u32; ROUND_KEYS_LENGTH_128],
+    ) -> Result<Vec<u8>> {
+        assert_eq!(input.len() % PIECE_SIZE, 0);
+
+        let blocks_count = input.len() / PIECE_SIZE;
+        assert_eq!(blocks_count, ivs.len());
+
+        let buffer_state = Self::validate_or_allocate_buffer::<Uchar16>(
+            &self.context,
+            &mut self.buffer_state,
+            input.len(),
+            flags::MEM_READ_WRITE | flags::MEM_ALLOC_HOST_PTR,
+        )?;
+
+        let buffer_ivs = Self::validate_or_allocate_buffer::<Uchar16>(
+            &self.context,
+            &mut self.buffer_iv,
+            ivs.len(),
+            flags::MEM_READ_WRITE | flags::MEM_ALLOC_HOST_PTR,
+        )?;
+
+        set_kernel_arg(&self.por_128_enc_kernel, 0, ArgVal::mem(&buffer_state))?;
+        set_kernel_arg(&self.por_128_enc_kernel, 1, ArgVal::mem(&buffer_ivs))?;
+
+        {
+            unsafe {
+                enqueue_write_buffer(
+                    &self.queue,
+                    &buffer_state,
+                    true,
+                    0,
+                    &utils::u8_slice_to_uchar16_vec(input),
+                    None::<Event>,
+                    None::<&mut Event>,
+                )?;
+            }
+        }
+
+        {
+            unsafe {
+                enqueue_write_buffer(
+                    &self.queue,
+                    &buffer_ivs,
+                    true,
+                    0,
+                    &utils::u128_slice_to_uchar16_vec(ivs),
+                    None::<Event>,
+                    None::<&mut Event>,
+                )?;
+            }
+        }
+
+        {
+            unsafe {
+                enqueue_write_buffer(
+                    &self.queue,
+                    &self.buffer_round_keys,
+                    true,
+                    0,
+                    &utils::u32_slice_to_uint_vec(keys),
+                    None::<Event>,
+                    None::<&mut Event>,
+                )?;
+            }
+        }
+
+        unsafe {
+            enqueue_kernel(
+                &self.queue,
+                &self.por_128_enc_kernel,
+                1,
+                None,
+                // TODO: This will not handle too big inputs that exceed VRAM
+                &[blocks_count, 0, 0],
+                None,
+                None::<Event>,
+                None::<&mut Event>,
+            )
+        }?;
+
+        let mut output = Vec::<u8>::with_capacity(input.len());
+        {
+            let mut result = Uchar16::from([0u8; BLOCK_SIZE]);
+            for offset in (0..input.len()).step_by(BLOCK_SIZE) {
+                unsafe {
+                    enqueue_read_buffer(
+                        &self.queue,
+                        &buffer_state,
+                        true,
+                        offset,
+                        &mut result,
+                        None::<Event>,
+                        None::<&mut Event>,
+                    )?;
+                }
+                output.extend_from_slice(&result);
+            }
+        }
+
+        finish(&self.queue)?;
+
+        Ok(output)
+    }
+
     fn validate_or_allocate_buffer<T: OclPrm>(
         context: &Context,
         buffer: &mut Option<CachedBuffer>,
@@ -304,9 +424,11 @@ impl Codec {
 mod tests {
     use super::*;
     use crate::aes_soft;
+    use crate::crypto;
 
     #[test]
     fn test_aes_enc_iterations() {
+        // AES-256
         let mut codec = Codec::new().unwrap();
 
         let key = vec![
@@ -343,8 +465,7 @@ mod tests {
         let ciphertext = codec.aes_256_enc_iterations(&input, &keys, 1).unwrap();
         assert_eq!(correct_ciphertext, ciphertext);
 
-        let mut codec = Codec::new().unwrap();
-
+        // AES-128
         let key = vec![
             0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6, 0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF,
             0x4F, 0x3C,
@@ -382,5 +503,18 @@ mod tests {
 
         let ciphertext = codec.aes_128_enc_iterations(&input, &keys, 1).unwrap();
         assert_eq!(correct_ciphertext, ciphertext);
+
+        // PoR
+        let ivs = vec![13u128];
+        let id = crypto::random_bytes_32();
+        let input = crypto::random_bytes_4096();
+        let correct_encryption =
+            crypto::por_encode_single_block_software(&input, &id, ivs[0] as usize).to_vec();
+
+        let mut keys = [0u32; 44];
+        aes_soft::setkey_enc_k128(&id, &mut keys);
+
+        let encryption = codec.por_128_enc(&input, &ivs, &keys).unwrap();
+        assert_eq!(correct_encryption, encryption);
     }
 }

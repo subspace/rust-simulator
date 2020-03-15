@@ -680,3 +680,40 @@ __kernel void aes_128_enc_iterations(
         aes_128_enc(&state[gid], keys);
     }
 }
+
+__constant uint rounds = 256;
+__constant uint piece_size = 4096;
+__constant uint blocks_per_piece = 4096 / 16;
+
+inline void por_128_enc_inner(
+	__global uchar16* state,
+	const uchar16 iv,
+	__constant const uint* keys
+) {
+    // XOR the first block with IV
+    state[0] ^= iv;
+
+    // Apply Rijndael cipher for the first block necessary number or times
+    for (uint r = 0; r < rounds; ++r) {
+        aes_128_enc(state, keys);
+    }
+
+    for (uint block = 1; block < blocks_per_piece; ++block) {
+        // XOR feedback into next current block
+        state[block] ^= state[block - 1];
+
+        for (uint r = 0; r < rounds; ++r) {
+            aes_128_enc(&state[block], keys);
+        }
+    }
+}
+
+__kernel void por_128_enc(
+	__global uchar16* state,
+	__constant const uchar16* iv,
+	__constant const uint* keys
+) {
+    uint gid = get_global_id(0);
+
+    por_128_enc_inner(&state[gid * piece_size], iv[gid], keys);
+}
