@@ -682,7 +682,6 @@ __kernel void aes_128_enc_iterations(
 }
 
 __constant uint rounds = 256;
-__constant uint piece_size = 4096;
 __constant uint blocks_per_piece = 4096 / 16;
 
 inline void por_128_enc_inner(
@@ -715,5 +714,5 @@ __kernel void por_128_enc(
 ) {
     uint gid = get_global_id(0);
 
-    por_128_enc_inner(&state[gid * piece_size], iv[gid], keys);
+    por_128_enc_inner(&state[gid * blocks_per_piece], iv[gid], keys);
 }

@@ -516,5 +516,22 @@ mod tests {
 
         let encryption = codec.por_128_enc(&input, &ivs, &keys).unwrap();
         assert_eq!(correct_encryption, encryption);
+
+        let ivs = vec![13u128, 13u128];
+        let encryption = codec
+            .por_128_enc(
+                &(0..2)
+                    .flat_map(|_| input.as_ref().to_vec())
+                    .collect::<Vec<u8>>()
+                    .as_ref(),
+                &ivs,
+                &keys,
+            )
+            .unwrap();
+        assert_eq!(
+            encryption[..PIECE_SIZE].to_vec(),
+            encryption[PIECE_SIZE..].to_vec()
+        );
+        assert_eq!(correct_encryption, encryption[PIECE_SIZE..].to_vec());
     }
 }
