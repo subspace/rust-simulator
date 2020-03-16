@@ -1,93 +1,100 @@
 #![allow(dead_code)]
+
 mod aes_open_cl;
 mod aes_soft;
 mod benchmarks;
 mod codec;
 mod crypto;
 mod ledger;
+mod manager;
+mod network;
 mod plotter;
-mod spv;
+mod rijndael_hacks;
+mod solver;
 mod utils;
 
-use merkle::{self, MerkleTree};
-use ring::digest::{Algorithm, SHA512};
+use async_std::sync::channel;
+use async_std::task;
+use futures::join;
+use ledger::{Block, BlockStatus, FullBlock, Ledger, Proof};
+use manager::ProtocolMessage;
+use network::NodeType;
 use std::env;
+use std::net::{Ipv4Addr, SocketAddr};
 use std::path::Path;
-use std::time::Instant;
+use std::time::Duration;
+
+/* TODO
+  1. Integrate and Extend Network
+    - handle all Option and Results better
+    - makes startup options configurable with CLI
+    - allow different nodes to have different piece counts
+    - allow for the same piece to be plotted many times (max piece count) to test parallel evaluation time
+  2. Deploy with Docker
+    - research AWS container management
+    - package with docker
+    - integrate with AWS
+    - spin up the gateway
+    - deploy farmers
+    - figure out how to evaluate performance
+  3. Correct/Optimize/Extend Encodings
+      - derive optimal secure encoding algorithm
+      - use SIMD register and AES-NI explicitly
+        - use registers for hardware XOR operations
+        - use register to set the number of blocks to encode/decode in parallel
+        - use registers to simplify Rijndael (no key expansion)
+      - compile to assembly and review code
+        - when is main memory called?
+        - are we using iterators optimally?
+        - any change for switching to Little Endian binary encoding
+      - disable hyper threading to see if there is any change
+      - find most efficient software implementation
+      - accelerate with a GPU
+      - accelerate with ARM crypto extensions
+*/
+
+#[cfg(target_arch = "x86")]
+use core::arch::x86 as arch;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64 as arch;
 
 pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
 pub const BLOCK_SIZE: usize = 16;
 pub const BLOCKS_PER_PIECE: usize = PIECE_SIZE / BLOCK_SIZE;
-pub const PLOT_SIZES: [usize; 1] = [
-    // 256,        // 1 MB
-    // 256 * 100,      // 100 MB
-    // 256 * 1000,     // 1 GB
-    // 256 * 1000 * 100,   // 100 GB
-    256 * 1000 * 1000, // 1 TB
-];
+pub const PIECE_COUNT: usize =
+    256                               // 1 MB
+    // 256 * 100                      // 100 MB
+    // 256 * 1000                     // 1 GB
+    // 256 * 1000 * 100               // 100 GB
+    // 256 * 1000 * 1000              // 1 TB
+    // 256 * 1000 * 1000 * 4          // 4 TB
+    // 256 * 1000 * 1000 * 16         // 16 TB
+;
 pub const ROUNDS: usize = 2048;
 pub const PIECES_PER_BATCH: usize = 8;
 pub const PIECES_PER_GROUP: usize = 64;
-pub const CHALLENGE_EVALUATIONS: usize = 16_000;
+pub const CHALLENGE_EVALUATIONS: usize = 800;
 
 pub type Piece = [u8; crate::PIECE_SIZE];
 
-// TODO
-//   Correct/Optimize Encodings
-//     derive optimal secure encoding algorithm
-//     use SIMD register and AES-NI explicitly
-//       use registers for hardware XOR operations
-//       use register to set the number of blocks to encode/decode in parallel
-//       use registers to simplify Rijndael (no key expansion)
-//     compile to assembly and review code
-//       when is main memory called?
-//       are we using iterators optimally?
-//       any change for switching to Little Endian binary encoding
-//     disable hyper threading to see if there is any change
-//     write parallel decoding on shared piece object
-//     find most efficient software implementation
-//     accelerate with a GPU
-//     accelerate with ARM crypto extensions
-//    Extend with ledger
-//   Extend with network
-//   Test with Docker on AWS
-fn main() {
-    benchmarks::run();
-    for plot_size in PLOT_SIZES.iter() {
-        simulator(*plot_size);
-    }
-}
+#[async_std::main]
+async fn main() {
+    println!("Starting new node");
+    let gateway_addr: std::net::SocketAddr = "127.0.0.1:8080".parse().unwrap();
 
-fn simulator(plot_size: usize) {
-    println!(
-        "\nRunning simulation for {} GB plot with {} challenge evaluations",
-        (plot_size * PIECE_SIZE) as f32 / (1000f32 * 1000f32 * 1000f32),
-        CHALLENGE_EVALUATIONS
-    );
-
-    // create random genesis piece
-    let genesis_piece = crypto::random_bytes_4096();
-    let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
-    println!("Created genesis piece");
-
-    // generate random identity
+    // determine node id, type, and socket address
     let keys = crypto::gen_keys();
     let binary_public_key: [u8; 32] = keys.public.to_bytes();
     let id = crypto::digest_sha_256(&binary_public_key);
-    println!("Generated node id");
+    let mut mode: NodeType = NodeType::Gateway;
+    let ip = Ipv4Addr::new(127, 0, 0, 1);
+    let mut port: u16 = 8080;
 
-    // build merkle tree
-    #[allow(non_upper_case_globals)]
-    static digest: &Algorithm = &SHA512;
-    let merkle_values = (0..255).map(|x| vec![x]).collect::<Vec<_>>();
-    let merkle_tree = MerkleTree::from_vec(digest, merkle_values.clone());
-    let merkle_proofs = merkle_values
-        .into_iter()
-        .map(|v| merkle_tree.gen_proof(v).unwrap())
-        .collect::<Vec<_>>();
-    let merkle_root = merkle_tree.root_hash();
-    println!("Built merkle tree");
+    // create genesis piece and plot
+    let genesis_piece = crypto::genesis_piece_from_seed("SUBSPACE");
+    let genesis_piece_hash = crypto::digest_sha_256(&genesis_piece);
+    let wait_time: u64 = 1000; // solve wait time in milliseconds
 
     // set storage path
     let path: String;
@@ -99,6 +106,8 @@ fn simulator(plot_size: usize) {
             .to_str()
             .unwrap()
             .to_string();
+        port = args[2].parse::<u16>().unwrap();
+        mode = NodeType::Peer;
     } else {
         path = Path::new(".")
             .join("results")
@@ -108,17 +117,13 @@ fn simulator(plot_size: usize) {
             .to_string();
     }
 
-    // open the plotter
+    // open the plotter and plot
     println!("Plotting pieces to {} ...", path);
-    let mut plot = plotter::Plot::new(path, plot_size);
+    let mut plot = plotter::Plot::new(path, PIECE_COUNT);
 
-    let plot_time = Instant::now();
-    let pieces: Vec<[u8; PIECE_SIZE]> = (0..PIECES_PER_BATCH)
-        .map(|_| genesis_piece.clone())
-        .collect();
+    let pieces: Vec<[u8; PIECE_SIZE]> = (0..PIECES_PER_BATCH).map(|_| genesis_piece).collect();
 
-    // plot pieces in groups of 64 divided into batches of 8. Each batch is encoded concurrently on the same core using instruction level parallelism, while all batches (the group) are encoded concurrently across different cores.
-    for group_index in 0..(plot_size / PIECES_PER_GROUP) {
+    for group_index in 0..(PIECE_COUNT / PIECES_PER_GROUP) {
         crypto::encode_eight_blocks_in_parallel_single_piece(
             &pieces,
             &id,
@@ -132,49 +137,56 @@ fn simulator(plot_size: usize) {
         })
     }
 
-    let total_plot_time = plot_time.elapsed();
-    let average_plot_time =
-        (total_plot_time.as_nanos() / plot_size as u128) as f32 / (1000f32 * 1000f32);
+    println!("Completed plotting");
 
-    println!("Average plot time is {:.3} ms per piece", average_plot_time);
-    println!(
-        "Total plot time is {:.3} minutes",
-        total_plot_time.as_secs_f32() / 60f32
-    );
-    println!(
-        "Plotting throughput is {} mb / sec",
-        ((plot_size as u64 * PIECE_SIZE as u64) / (1000 * 1000)) as f32
-            / (total_plot_time.as_secs_f32())
-    );
-    println!("Solving, proving, and verifying challenges ...",);
-    let evaluate_time = Instant::now();
-
-    // start evaluation loop
-    let mut challenge = crypto::random_bytes_32();
+    let (merkle_proofs, merkle_root) = crypto::build_merkle_tree();
+    let tx_payload = crypto::random_bytes_4096().to_vec();
     let quality_threshold = 0;
-    for _ in 0..CHALLENGE_EVALUATIONS {
-        let solution = spv::solve(&challenge, plot_size, &mut plot);
-        if solution.quality >= quality_threshold {
-            let proof = spv::prove(challenge, &solution, &keys);
-            spv::verify(proof, plot_size, &genesis_piece_hash);
-            let mut merkle_index = solution.index % 256;
-            if merkle_index == 255 {
-                merkle_index = 0;
-            }
-            let merkle_proof = merkle_proofs[merkle_index as usize].clone();
-            if !merkle_proof.validate(merkle_root) {
-                println!("Invalid proof, merkle proof is invalid");
-            }
-            challenge = crypto::digest_sha_256(&solution.tag);
-        }
-    }
 
-    let average_evaluate_time = (evaluate_time.elapsed().as_nanos() / CHALLENGE_EVALUATIONS as u128)
-        as f32
-        / (1000f32 * 1000f32);
+    // create channels between background tasks
+    let (main_to_net_tx, main_to_net_rx) = channel::<ProtocolMessage>(32);
+    let (main_to_sol_tx, main_to_sol_rx) = channel::<ProtocolMessage>(32);
+    let (any_to_main_tx, any_to_main_rx) = channel::<ProtocolMessage>(32);
+    let sol_to_main_tx = any_to_main_tx.clone();
 
-    println!(
-        "Average evaluation time is {:.3} ms per piece",
-        average_evaluate_time
-    );
+    let mut ledger = Ledger::new(merkle_root, genesis_piece_hash, quality_threshold);
+
+    // solve loop
+    let solve = task::spawn(async move {
+        solver::run(wait_time, main_to_sol_rx, sol_to_main_tx, &mut plot).await;
+    });
+
+    // setup protocol manager loop and spawn background task
+    let main = task::spawn(async move {
+        manager::run(
+            mode,
+            genesis_piece_hash,
+            quality_threshold,
+            binary_public_key,
+            keys,
+            merkle_proofs,
+            tx_payload,
+            &mut ledger,
+            any_to_main_rx,
+            main_to_net_tx,
+            main_to_sol_tx,
+        )
+        .await;
+    });
+
+    // setup udp socket listener loop and spawn background task
+    let net = task::spawn(async move {
+        network::run(
+            gateway_addr,
+            id,
+            port,
+            ip,
+            mode,
+            any_to_main_tx,
+            main_to_net_rx,
+        )
+        .await;
+    });
+
+    join!(net, main, solve);
 }

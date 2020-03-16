@@ -1,15 +1,24 @@
+use super::*;
 use crate::Piece;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::SeekFrom;
-// use super::crypto;
 
 pub struct Plot {
     path: String,
     size: usize,
     file: File,
     map: HashMap<usize, u64>,
+}
+
+#[derive(Copy, Clone)]
+pub struct Solution {
+    pub challenge: [u8; 32],
+    pub index: u64,
+    pub tag: [u8; 32],
+    pub quality: u8,
+    pub encoding: Piece,
 }
 
 impl Plot {
@@ -35,8 +44,6 @@ impl Plot {
 
     pub fn add(&mut self, encoding: &Piece, index: usize) {
         let position = self.file.seek(SeekFrom::Current(0)).unwrap();
-        // let encoding_hash = crypto::digest_sha_256(&encoding);
-        // println!("Added encoding with hash {} at position {} for index {}", hex::encode(encoding_hash.to_vec()), position, index);
         self.file.write_all(&encoding[0..4096]).unwrap();
         self.map.insert(index, position);
     }
@@ -47,7 +54,20 @@ impl Plot {
         let mut buffer = [0u8; crate::PIECE_SIZE];
         self.file.read_exact(&mut buffer).unwrap();
         buffer
-        // let encoding_hash = crypto::digest_sha_256(&encoding);
-        // println!("Retrieving encoding with hash {} at index {} from position {}", hex::encode(encoding_hash.to_vec()), index, position);
+    }
+
+    pub fn solve(&mut self, challenge: [u8; 32], piece_count: usize) -> Solution {
+        let index = utils::modulo(&challenge, piece_count);
+        let encoding = self.get(index);
+        let tag = crypto::create_hmac(&encoding[0..4096], &challenge);
+        let quality = utils::measure_quality(&tag);
+
+        Solution {
+            challenge,
+            index: index as u64,
+            tag,
+            quality,
+            encoding,
+        }
     }
 }
