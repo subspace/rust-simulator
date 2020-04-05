@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
+mod aes_open_cl;
+mod aes_soft;
 mod benchmarks;
+mod codec;
 mod crypto;
 mod ledger;
 mod manager;
