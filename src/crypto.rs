@@ -18,6 +18,8 @@ use rand::rngs::OsRng;
 use rand::Rng;
 use rayon::prelude::*;
 use ring::{digest, hmac};
+use std::convert::TryInto;
+use std::io::Write;
 
 const ROUNDS: usize = 1;
 
@@ -26,6 +28,13 @@ type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 /// Generate a array of random bytes of length 4096 to be used as a random piece.
 pub fn random_bytes_4096() -> Piece {
     let mut bytes = [0u8; crate::PIECE_SIZE];
+    rand::thread_rng().fill(&mut bytes[..]);
+    bytes
+}
+
+/// Generate a array of random bytes of length 32 to be used as a random challenge or id.
+pub fn random_bytes_16() -> [u8; 16] {
+    let mut bytes = [0u8; 16];
     rand::thread_rng().fill(&mut bytes[..]);
     bytes
 }
@@ -303,6 +312,37 @@ pub fn por_encode_single_block_software(piece: &Piece, id: &[u8], index: usize) 
         block_offset += crate::BLOCK_SIZE;
     }
     encoding
+}
+
+pub fn por_encode_single_block(
+    piece: &Piece,
+    keys: &[[u8; 16]; 11],
+    iv: &[u8; 16],
+    rounds: usize,
+) -> Piece {
+    let mut encoded_piece = *piece;
+
+    let mut feedback = *iv;
+
+    encoded_piece
+        .chunks_exact_mut(crate::BLOCK_SIZE)
+        .for_each(|mut block| {
+            block
+                .iter_mut()
+                .zip(&feedback)
+                .for_each(|(byte, feedback)| {
+                    *byte ^= feedback;
+                });
+
+            // Current encrypted block
+            feedback = unsafe {
+                aes_benchmarks::encode_aes_ni_128(&keys, block[..].try_into().unwrap(), rounds)
+            };
+
+            block.write_all(&feedback).unwrap();
+        });
+
+    encoded_piece
 }
 
 /// Encodes one block at a time for a single piece on a GPU
@@ -1244,3 +1284,43 @@ pub fn decode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8], offset: usiz
         .map(|(index, piece)| decode_eight_blocks(piece, id, offset + index))
         .collect()
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::aes_soft;
+//     use crate::crypto;
+//
+//     #[test]
+//     fn test_por_encode_single_block() {
+//         // PoR
+//         let index = 13;
+//         let iv = utils::usize_to_bytes(index);
+//         let id = crypto::random_bytes_32();
+//         let input = crypto::random_bytes_4096();
+//         let correct_encryption =
+//             crypto::por_encode_single_block_software(&input, &id, index).to_vec();
+//
+//         let keys = {
+//             let mut keys = [0u32; 44];
+//             aes_soft::setkey_enc_k128(&id, &mut keys);
+//
+//             let flat_keys = keys
+//                 .iter()
+//                 .flat_map(|n| n.to_le_bytes().to_vec())
+//                 .collect::<Vec<u8>>();
+//
+//             let mut keys = [[0u8; 16]; 11];
+//             keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
+//                 keys_group.iter_mut().enumerate().for_each(|(index, key)| {
+//                     *key = *flat_keys.get(group * 16 + index).unwrap();
+//                 });
+//             });
+//
+//             keys
+//         };
+//
+//         let encryption = por_encode_single_block(&input, &keys, &iv, 256).to_vec();
+//         assert_eq!(correct_encryption, encryption);
+//     }
+// }
