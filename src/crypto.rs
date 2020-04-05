@@ -330,8 +330,8 @@ pub fn por_encode_single_block(
             block
                 .iter_mut()
                 .zip(&feedback)
-                .for_each(|(byte, feedback)| {
-                    *byte ^= feedback;
+                .for_each(|(block_byte, feedback_byte)| {
+                    *block_byte ^= feedback_byte;
                 });
 
             // Current encrypted block
