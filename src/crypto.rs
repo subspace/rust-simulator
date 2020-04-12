@@ -314,7 +314,7 @@ pub fn por_encode_single_block_software(piece: &Piece, id: &[u8], index: usize) 
     encoding
 }
 
-pub fn por_encode_single_block(
+pub fn por_encode_simple(
     piece: &Piece,
     keys: &[[u8; 16]; 11],
     iv: &[u8; 16],
@@ -343,6 +343,67 @@ pub fn por_encode_single_block(
         });
 
     encoded_piece
+}
+
+pub fn por_encode_pipelined(
+    pieces: [&Piece; 4],
+    keys: &[[u8; 16]; 11],
+    iv: [&[u8; 16]; 4],
+    rounds: usize,
+) -> [Piece; 4] {
+    let mut encoded_piece0 = *pieces[0];
+    let mut encoded_piece1 = *pieces[1];
+    let mut encoded_piece2 = *pieces[2];
+    let mut encoded_piece3 = *pieces[3];
+
+    let mut feedbacks = [*iv[0], *iv[1], *iv[2], *iv[3]];
+
+    encoded_piece0
+        .chunks_exact_mut(crate::BLOCK_SIZE)
+        .zip(encoded_piece1.chunks_exact_mut(crate::BLOCK_SIZE))
+        .zip(encoded_piece2.chunks_exact_mut(crate::BLOCK_SIZE))
+        .zip(encoded_piece3.chunks_exact_mut(crate::BLOCK_SIZE))
+        .map(|(((piece0, piece1), piece2), piece3)| [piece0, piece1, piece2, piece3])
+        .for_each(|mut blocks| {
+            blocks
+                .iter_mut()
+                .zip(&feedbacks)
+                .for_each(|(block, feedback)| {
+                    block.iter_mut().zip(feedback.iter()).for_each(
+                        |(block_byte, feedback_byte)| {
+                            *block_byte ^= feedback_byte;
+                        },
+                    );
+                });
+
+            // Current encrypted block
+            feedbacks = unsafe {
+                aes_benchmarks::encode_aes_ni_128_pipelined_x4(
+                    &keys,
+                    &[
+                        blocks[0][..].try_into().unwrap(),
+                        blocks[1][..].try_into().unwrap(),
+                        blocks[2][..].try_into().unwrap(),
+                        blocks[3][..].try_into().unwrap(),
+                    ],
+                    rounds,
+                )
+            };
+
+            blocks
+                .iter_mut()
+                .zip(feedbacks.iter())
+                .for_each(|(block, feedback)| {
+                    block.write_all(feedback).unwrap();
+                });
+        });
+
+    [
+        encoded_piece0,
+        encoded_piece1,
+        encoded_piece2,
+        encoded_piece3,
+    ]
 }
 
 /// Encodes one block at a time for a single piece on a GPU
@@ -1320,7 +1381,13 @@ mod tests {
             keys
         };
 
-        let encryption = por_encode_single_block(&input, &keys, &iv, 256).to_vec();
+        let encryption = por_encode_simple(&input, &keys, &iv, 256).to_vec();
         assert_eq!(correct_encryption, encryption);
+
+        let encryptions = por_encode_pipelined([&input; 4], &keys, [&iv; 4], 256);
+
+        for encryption in encryptions.iter() {
+            assert_eq!(correct_encryption, encryption.to_vec());
+        }
     }
 }

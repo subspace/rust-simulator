@@ -79,11 +79,17 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let iv = crypto::random_bytes_16();
 
         let mut group = c.benchmark_group("CPU benchmark");
-        group.sample_size(100);
+        group.sample_size(200);
 
         let rounds = 256;
-        group.bench_function("PoR-128-encode-single", |b| {
-            b.iter(|| black_box(crypto::por_encode_single_block(&piece, &keys, &iv, rounds)))
+        group.bench_function("PoR-128-encode-simple", |b| {
+            b.iter(|| black_box(crypto::por_encode_simple(&piece, &keys, &iv, rounds)))
+        });
+
+        group.bench_function("PoR-128-encode-pipelined", |b| {
+            let pieces = [&piece; 4];
+            let ivs = [&iv; 4];
+            b.iter(|| black_box(crypto::por_encode_pipelined(pieces, &keys, ivs, rounds)))
         });
 
         group.finish();
