@@ -1,5 +1,8 @@
-mod aes_ll;
+mod aes_low_level;
 
+use crate::aes128_load4;
+use crate::aes128_load_keys;
+use crate::aes128_store4;
 use crate::aes_open_cl::Aes256OpenCL;
 use crate::aes_soft;
 use crate::rijndael_hacks::Cipher;
@@ -13,6 +16,7 @@ use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use byteorder::BigEndian;
 use byteorder::WriteBytesExt;
+use core::arch::x86_64::*;
 use crossbeam_utils::thread;
 use ed25519_dalek::Keypair;
 use merkle_tree_binary::Tree;
@@ -428,45 +432,35 @@ pub fn por_decode_pipelined_internal(
     iv: &[u8; 16],
     aes_iterations: usize,
 ) {
+    let keys_reg = unsafe { aes128_load_keys!(keys) };
     let mut feedback = *iv;
 
     piece
         .chunks_exact_mut(crate::BLOCK_SIZE * 4)
         .for_each(|blocks| {
-            let (block0, blocks) = blocks.split_at_mut(crate::BLOCK_SIZE);
-            let (block1, blocks) = blocks.split_at_mut(crate::BLOCK_SIZE);
-            let (block2, block3) = blocks.split_at_mut(crate::BLOCK_SIZE);
+            let (mut block0, blocks) = blocks.split_at_mut(crate::BLOCK_SIZE);
+            let (mut block1, blocks) = blocks.split_at_mut(crate::BLOCK_SIZE);
+            let (mut block2, mut block3) = blocks.split_at_mut(crate::BLOCK_SIZE);
 
-            let feedbacks = [
-                feedback,
-                block0.as_ref().try_into().unwrap(),
-                block1.as_ref().try_into().unwrap(),
-                block2.as_ref().try_into().unwrap(),
-            ];
+            let previous_feedback = feedback;
             feedback.as_mut().write_all(block3).unwrap();
 
-            aes_ll::decode_aes_ni_128_pipelined_x4(
-                &keys,
-                [
-                    block0.try_into().unwrap(),
-                    block1.try_into().unwrap(),
-                    block2.try_into().unwrap(),
-                    block3.try_into().unwrap(),
-                ],
+            let mut blocks_reg = unsafe { aes128_load4!(block0, block1, block2, block3) };
+            let feedbacks_reg = unsafe { aes128_load4!(previous_feedback, block0, block1, block2) };
+
+            aes_low_level::por_decode_pipelined_low_level(
+                keys_reg,
+                &mut blocks_reg,
+                feedbacks_reg,
                 aes_iterations,
             );
 
-            [block0, block1, block2, block3]
-                .iter_mut()
-                .zip(feedbacks.iter())
-                .for_each(|(block, feedback)| {
-                    block
-                        .iter_mut()
-                        .zip(feedback)
-                        .for_each(|(block_byte, feedback_byte)| {
-                            *block_byte ^= feedback_byte;
-                        });
-                });
+            unsafe {
+                aes128_store4!(
+                    [&mut block0, &mut block1, &mut block2, &mut block3],
+                    blocks_reg
+                );
+            }
         });
 }
 
