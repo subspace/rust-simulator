@@ -36,5 +36,5 @@ lto = true
 opt-level = 3
 
 [[bench]]
-name = "gpu_benchmark"
+name = "benchmarks"
 harness = false
