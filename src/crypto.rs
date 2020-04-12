@@ -1,3 +1,5 @@
+mod aes_ll;
+
 use crate::aes_open_cl::Aes256OpenCL;
 use crate::aes_soft;
 use crate::rijndael_hacks::Cipher;
@@ -18,6 +20,8 @@ use rand::rngs::OsRng;
 use rand::Rng;
 use rayon::prelude::*;
 use ring::{digest, hmac};
+use std::convert::TryInto;
+use std::io::Write;
 
 const ROUNDS: usize = 1;
 
@@ -26,6 +30,13 @@ type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 /// Generate a array of random bytes of length 4096 to be used as a random piece.
 pub fn random_bytes_4096() -> Piece {
     let mut bytes = [0u8; crate::PIECE_SIZE];
+    rand::thread_rng().fill(&mut bytes[..]);
+    bytes
+}
+
+/// Generate a array of random bytes of length 32 to be used as a random challenge or id.
+pub fn random_bytes_16() -> [u8; 16] {
+    let mut bytes = [0u8; 16];
     rand::thread_rng().fill(&mut bytes[..]);
     bytes
 }
@@ -303,6 +314,172 @@ pub fn por_encode_single_block_software(piece: &Piece, id: &[u8], index: usize) 
         block_offset += crate::BLOCK_SIZE;
     }
     encoding
+}
+
+pub fn por_encode_simple_internal(
+    piece: &mut Piece,
+    keys: &[[u8; 16]; 11],
+    iv: &[u8; 16],
+    aes_iterations: usize,
+) {
+    let mut feedback = *iv;
+
+    piece
+        .chunks_exact_mut(crate::BLOCK_SIZE)
+        .for_each(|mut block| {
+            block
+                .iter_mut()
+                .zip(&feedback)
+                .for_each(|(block_byte, feedback_byte)| {
+                    *block_byte ^= feedback_byte;
+                });
+
+            // Current encrypted block
+            feedback = unsafe {
+                aes_benchmarks::encode_aes_ni_128(
+                    &keys,
+                    block[..].try_into().unwrap(),
+                    aes_iterations,
+                )
+            };
+
+            block.write_all(&feedback).unwrap();
+        });
+}
+
+pub fn por_encode_simple(
+    piece: &mut Piece,
+    keys: &[[u8; 16]; 11],
+    iv: &[u8; 16],
+    aes_iterations: usize,
+    breadth_iterations: usize,
+) {
+    for _ in 0..breadth_iterations {
+        por_encode_simple_internal(piece, keys, iv, aes_iterations);
+    }
+}
+
+pub fn por_encode_pipelined_internal(
+    pieces: &mut [Piece; 4],
+    keys: &[[u8; 16]; 11],
+    iv: [&[u8; 16]; 4],
+    aes_iterations: usize,
+) {
+    let [piece0, piece1, piece2, piece3] = pieces;
+
+    let mut feedbacks = [*iv[0], *iv[1], *iv[2], *iv[3]];
+
+    piece0
+        .chunks_exact_mut(crate::BLOCK_SIZE)
+        .zip(piece1.chunks_exact_mut(crate::BLOCK_SIZE))
+        .zip(piece2.chunks_exact_mut(crate::BLOCK_SIZE))
+        .zip(piece3.chunks_exact_mut(crate::BLOCK_SIZE))
+        .map(|(((piece0, piece1), piece2), piece3)| [piece0, piece1, piece2, piece3])
+        .for_each(|mut blocks| {
+            blocks
+                .iter_mut()
+                .zip(&feedbacks)
+                .for_each(|(block, feedback)| {
+                    block.iter_mut().zip(feedback.iter()).for_each(
+                        |(block_byte, feedback_byte)| {
+                            *block_byte ^= feedback_byte;
+                        },
+                    );
+                });
+
+            // Current encrypted block
+            feedbacks = unsafe {
+                aes_benchmarks::encode_aes_ni_128_pipelined_x4(
+                    &keys,
+                    &[
+                        blocks[0][..].try_into().unwrap(),
+                        blocks[1][..].try_into().unwrap(),
+                        blocks[2][..].try_into().unwrap(),
+                        blocks[3][..].try_into().unwrap(),
+                    ],
+                    aes_iterations,
+                )
+            };
+
+            blocks
+                .iter_mut()
+                .zip(feedbacks.iter())
+                .for_each(|(block, feedback)| {
+                    block.write_all(feedback).unwrap();
+                });
+        });
+}
+
+pub fn por_encode_pipelined(
+    pieces: &mut [Piece; 4],
+    keys: &[[u8; 16]; 11],
+    iv: [&[u8; 16]; 4],
+    aes_iterations: usize,
+    breadth_iterations: usize,
+) {
+    for _ in 0..breadth_iterations {
+        por_encode_pipelined_internal(pieces, keys, iv, aes_iterations);
+    }
+}
+
+pub fn por_decode_pipelined_internal(
+    piece: &mut Piece,
+    keys: &[[u8; 16]; 11],
+    iv: &[u8; 16],
+    aes_iterations: usize,
+) {
+    let mut feedback = *iv;
+
+    piece
+        .chunks_exact_mut(crate::BLOCK_SIZE * 4)
+        .for_each(|blocks| {
+            let (block0, blocks) = blocks.split_at_mut(crate::BLOCK_SIZE);
+            let (block1, blocks) = blocks.split_at_mut(crate::BLOCK_SIZE);
+            let (block2, block3) = blocks.split_at_mut(crate::BLOCK_SIZE);
+
+            let feedbacks = [
+                feedback,
+                block0.as_ref().try_into().unwrap(),
+                block1.as_ref().try_into().unwrap(),
+                block2.as_ref().try_into().unwrap(),
+            ];
+            feedback.as_mut().write_all(block3).unwrap();
+
+            aes_ll::decode_aes_ni_128_pipelined_x4(
+                &keys,
+                [
+                    block0.try_into().unwrap(),
+                    block1.try_into().unwrap(),
+                    block2.try_into().unwrap(),
+                    block3.try_into().unwrap(),
+                ],
+                aes_iterations,
+            );
+
+            [block0, block1, block2, block3]
+                .iter_mut()
+                .zip(feedbacks.iter())
+                .for_each(|(block, feedback)| {
+                    block
+                        .iter_mut()
+                        .zip(feedback)
+                        .for_each(|(block_byte, feedback_byte)| {
+                            *block_byte ^= feedback_byte;
+                        });
+                });
+        });
+}
+
+pub fn por_decode_pipelined(
+    piece: &mut Piece,
+    keys: &[[u8; 16]; 11],
+    iv: &[u8; 16],
+    aes_iterations: usize,
+    breadth_iterations: usize,
+) {
+    for _ in 0..breadth_iterations {
+        por_decode_pipelined_internal(piece, keys, iv, aes_iterations);
+    }
 }
 
 /// Encodes one block at a time for a single piece on a GPU
@@ -1243,4 +1420,76 @@ pub fn decode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8], offset: usiz
         .enumerate()
         .map(|(index, piece)| decode_eight_blocks(piece, id, offset + index))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aes_soft;
+    use crate::crypto;
+
+    #[test]
+    fn test_por_encode_single_block() {
+        // PoR
+        let index = 13;
+        let iv = utils::usize_to_bytes(index);
+        let id = crypto::random_bytes_32();
+        let input = crypto::random_bytes_4096();
+        let aes_iterations = 256;
+        let correct_encoding = crypto::por_encode_single_block_software(&input, &id, index);
+
+        let keys = {
+            let mut keys = [0u32; 44];
+            aes_soft::setkey_enc_k128(&id, &mut keys);
+
+            let flat_keys = keys
+                .iter()
+                .flat_map(|n| n.to_be_bytes().to_vec())
+                .collect::<Vec<u8>>();
+
+            let mut keys = [[0u8; 16]; 11];
+            keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
+                keys_group.iter_mut().enumerate().for_each(|(index, key)| {
+                    *key = *flat_keys.get(group * 16 + index).unwrap();
+                });
+            });
+
+            keys
+        };
+
+        let mut encoding = input;
+        por_encode_simple_internal(&mut encoding, &keys, &iv, aes_iterations);
+        assert_eq!(encoding.to_vec(), correct_encoding.to_vec());
+
+        let mut encodings = [input; 4];
+        por_encode_pipelined_internal(&mut encodings, &keys, [&iv; 4], aes_iterations);
+
+        for encoding in encodings.iter() {
+            assert_eq!(encoding.to_vec(), correct_encoding.to_vec());
+        }
+
+        let keys = {
+            let mut keys = [0u32; 44];
+            aes_soft::setkey_dec_k128(&id, &mut keys);
+
+            let flat_keys = keys
+                .iter()
+                .flat_map(|n| n.to_be_bytes().to_vec())
+                .collect::<Vec<u8>>();
+
+            let mut keys = [[0u8; 16]; 11];
+            keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
+                keys_group.iter_mut().enumerate().for_each(|(index, key)| {
+                    *key = *flat_keys.get(group * 16 + index).unwrap();
+                });
+            });
+
+            keys
+        };
+
+        let mut decoding = correct_encoding;
+        por_decode_pipelined_internal(&mut decoding, &keys, &iv, aes_iterations);
+
+        assert_eq!(decoding.to_vec(), input.to_vec());
+    }
 }
