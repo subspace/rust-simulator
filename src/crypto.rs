@@ -1285,42 +1285,42 @@ pub fn decode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8], offset: usiz
         .collect()
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::aes_soft;
-//     use crate::crypto;
-//
-//     #[test]
-//     fn test_por_encode_single_block() {
-//         // PoR
-//         let index = 13;
-//         let iv = utils::usize_to_bytes(index);
-//         let id = crypto::random_bytes_32();
-//         let input = crypto::random_bytes_4096();
-//         let correct_encryption =
-//             crypto::por_encode_single_block_software(&input, &id, index).to_vec();
-//
-//         let keys = {
-//             let mut keys = [0u32; 44];
-//             aes_soft::setkey_enc_k128(&id, &mut keys);
-//
-//             let flat_keys = keys
-//                 .iter()
-//                 .flat_map(|n| n.to_le_bytes().to_vec())
-//                 .collect::<Vec<u8>>();
-//
-//             let mut keys = [[0u8; 16]; 11];
-//             keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
-//                 keys_group.iter_mut().enumerate().for_each(|(index, key)| {
-//                     *key = *flat_keys.get(group * 16 + index).unwrap();
-//                 });
-//             });
-//
-//             keys
-//         };
-//
-//         let encryption = por_encode_single_block(&input, &keys, &iv, 256).to_vec();
-//         assert_eq!(correct_encryption, encryption);
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::aes_soft;
+    use crate::crypto;
+
+    #[test]
+    fn test_por_encode_single_block() {
+        // PoR
+        let index = 13;
+        let iv = utils::usize_to_bytes(index);
+        let id = crypto::random_bytes_32();
+        let input = crypto::random_bytes_4096();
+        let correct_encryption =
+            crypto::por_encode_single_block_software(&input, &id, index).to_vec();
+
+        let keys = {
+            let mut keys = [0u32; 44];
+            aes_soft::setkey_enc_k128(&id, &mut keys);
+
+            let flat_keys = keys
+                .iter()
+                .flat_map(|n| n.to_be_bytes().to_vec())
+                .collect::<Vec<u8>>();
+
+            let mut keys = [[0u8; 16]; 11];
+            keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
+                keys_group.iter_mut().enumerate().for_each(|(index, key)| {
+                    *key = *flat_keys.get(group * 16 + index).unwrap();
+                });
+            });
+
+            keys
+        };
+
+        let encryption = por_encode_single_block(&input, &keys, &iv, 256).to_vec();
+        assert_eq!(correct_encryption, encryption);
+    }
+}
