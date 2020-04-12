@@ -314,17 +314,15 @@ pub fn por_encode_single_block_software(piece: &Piece, id: &[u8], index: usize) 
     encoding
 }
 
-pub fn por_encode_simple(
-    piece: &Piece,
+pub fn por_encode_simple_internal(
+    piece: &mut Piece,
     keys: &[[u8; 16]; 11],
     iv: &[u8; 16],
     rounds: usize,
-) -> Piece {
-    let mut encoded_piece = *piece;
-
+) {
     let mut feedback = *iv;
 
-    encoded_piece
+    piece
         .chunks_exact_mut(crate::BLOCK_SIZE)
         .for_each(|mut block| {
             block
@@ -341,28 +339,23 @@ pub fn por_encode_simple(
 
             block.write_all(&feedback).unwrap();
         });
-
-    encoded_piece
 }
 
-pub fn por_encode_pipelined(
-    pieces: [&Piece; 4],
+pub fn por_encode_pipelined_internal(
+    pieces: &mut [Piece; 4],
     keys: &[[u8; 16]; 11],
     iv: [&[u8; 16]; 4],
     rounds: usize,
-) -> [Piece; 4] {
-    let mut encoded_piece0 = *pieces[0];
-    let mut encoded_piece1 = *pieces[1];
-    let mut encoded_piece2 = *pieces[2];
-    let mut encoded_piece3 = *pieces[3];
+) {
+    let [piece0, piece1, piece2, piece3] = pieces;
 
     let mut feedbacks = [*iv[0], *iv[1], *iv[2], *iv[3]];
 
-    encoded_piece0
+    piece0
         .chunks_exact_mut(crate::BLOCK_SIZE)
-        .zip(encoded_piece1.chunks_exact_mut(crate::BLOCK_SIZE))
-        .zip(encoded_piece2.chunks_exact_mut(crate::BLOCK_SIZE))
-        .zip(encoded_piece3.chunks_exact_mut(crate::BLOCK_SIZE))
+        .zip(piece1.chunks_exact_mut(crate::BLOCK_SIZE))
+        .zip(piece2.chunks_exact_mut(crate::BLOCK_SIZE))
+        .zip(piece3.chunks_exact_mut(crate::BLOCK_SIZE))
         .map(|(((piece0, piece1), piece2), piece3)| [piece0, piece1, piece2, piece3])
         .for_each(|mut blocks| {
             blocks
@@ -397,13 +390,6 @@ pub fn por_encode_pipelined(
                     block.write_all(feedback).unwrap();
                 });
         });
-
-    [
-        encoded_piece0,
-        encoded_piece1,
-        encoded_piece2,
-        encoded_piece3,
-    ]
 }
 
 /// Encodes one block at a time for a single piece on a GPU
@@ -1381,10 +1367,12 @@ mod tests {
             keys
         };
 
-        let encryption = por_encode_simple(&input, &keys, &iv, 256).to_vec();
-        assert_eq!(correct_encryption, encryption);
+        let mut encryption = input;
+        por_encode_simple_internal(&mut encryption, &keys, &iv, 256);
+        assert_eq!(correct_encryption, encryption.to_vec());
 
-        let encryptions = por_encode_pipelined([&input; 4], &keys, [&iv; 4], 256);
+        let mut encryptions = [input; 4];
+        por_encode_pipelined_internal(&mut encryptions, &keys, [&iv; 4], 256);
 
         for encryption in encryptions.iter() {
             assert_eq!(correct_encryption, encryption.to_vec());

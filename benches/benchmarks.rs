@@ -83,13 +83,25 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let rounds = 256;
         group.bench_function("PoR-128-encode-simple", |b| {
-            b.iter(|| black_box(crypto::por_encode_simple(&piece, &keys, &iv, rounds)))
+            b.iter(|| {
+                let mut piece = piece;
+                black_box(crypto::por_encode_simple_internal(
+                    &mut piece, &keys, &iv, rounds,
+                ))
+            })
         });
 
         group.bench_function("PoR-128-encode-pipelined", |b| {
-            let pieces = [&piece; 4];
+            let mut pieces = [piece; 4];
             let ivs = [&iv; 4];
-            b.iter(|| black_box(crypto::por_encode_pipelined(pieces, &keys, ivs, rounds)))
+            b.iter(|| {
+                black_box(crypto::por_encode_pipelined_internal(
+                    &mut pieces,
+                    &keys,
+                    ivs,
+                    rounds,
+                ))
+            })
         });
 
         group.finish();
