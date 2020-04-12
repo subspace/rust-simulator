@@ -109,6 +109,19 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             })
         });
 
+        // Here we use incorrect key, but performance should be identical
+        group.bench_function("PoR-128-decode-pipelined-internal", |b| {
+            let mut piece = piece;
+            b.iter(|| {
+                black_box(crypto::por_decode_pipelined_internal(
+                    &mut piece,
+                    &keys,
+                    &iv,
+                    aes_iterations,
+                ))
+            })
+        });
+
         group.bench_function("PoR-128-encode-simple", |b| {
             b.iter(|| {
                 let mut piece = piece;
@@ -130,6 +143,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                     &mut pieces,
                     &keys,
                     ivs,
+                    aes_iterations,
+                    breadth_iterations,
+                ))
+            })
+        });
+
+        // Here we use incorrect key, but performance should be identical
+        group.bench_function("PoR-128-decode-pipelined", |b| {
+            let mut piece = piece;
+            b.iter(|| {
+                black_box(crypto::por_decode_pipelined(
+                    &mut piece,
+                    &keys,
+                    &iv,
                     aes_iterations,
                     breadth_iterations,
                 ))
