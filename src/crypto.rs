@@ -318,7 +318,7 @@ pub fn por_encode_simple_internal(
     piece: &mut Piece,
     keys: &[[u8; 16]; 11],
     iv: &[u8; 16],
-    rounds: usize,
+    aes_iterations: usize,
 ) {
     let mut feedback = *iv;
 
@@ -334,18 +334,34 @@ pub fn por_encode_simple_internal(
 
             // Current encrypted block
             feedback = unsafe {
-                aes_benchmarks::encode_aes_ni_128(&keys, block[..].try_into().unwrap(), rounds)
+                aes_benchmarks::encode_aes_ni_128(
+                    &keys,
+                    block[..].try_into().unwrap(),
+                    aes_iterations,
+                )
             };
 
             block.write_all(&feedback).unwrap();
         });
 }
 
+pub fn por_encode_simple(
+    piece: &mut Piece,
+    keys: &[[u8; 16]; 11],
+    iv: &[u8; 16],
+    aes_iterations: usize,
+    breadth_iterations: usize,
+) {
+    (0..breadth_iterations).for_each(|_| {
+        por_encode_simple_internal(piece, keys, iv, aes_iterations);
+    });
+}
+
 pub fn por_encode_pipelined_internal(
     pieces: &mut [Piece; 4],
     keys: &[[u8; 16]; 11],
     iv: [&[u8; 16]; 4],
-    rounds: usize,
+    aes_iterations: usize,
 ) {
     let [piece0, piece1, piece2, piece3] = pieces;
 
@@ -379,7 +395,7 @@ pub fn por_encode_pipelined_internal(
                         blocks[2][..].try_into().unwrap(),
                         blocks[3][..].try_into().unwrap(),
                     ],
-                    rounds,
+                    aes_iterations,
                 )
             };
 
@@ -390,6 +406,18 @@ pub fn por_encode_pipelined_internal(
                     block.write_all(feedback).unwrap();
                 });
         });
+}
+
+pub fn por_encode_pipelined(
+    pieces: &mut [Piece; 4],
+    keys: &[[u8; 16]; 11],
+    iv: [&[u8; 16]; 4],
+    aes_iterations: usize,
+    breadth_iterations: usize,
+) {
+    (0..breadth_iterations).for_each(|_| {
+        por_encode_pipelined_internal(pieces, keys, iv, aes_iterations);
+    });
 }
 
 /// Encodes one block at a time for a single piece on a GPU
@@ -1345,6 +1373,7 @@ mod tests {
         let iv = utils::usize_to_bytes(index);
         let id = crypto::random_bytes_32();
         let input = crypto::random_bytes_4096();
+        let aes_iterations = 256;
         let correct_encryption =
             crypto::por_encode_single_block_software(&input, &id, index).to_vec();
 
@@ -1368,11 +1397,11 @@ mod tests {
         };
 
         let mut encryption = input;
-        por_encode_simple_internal(&mut encryption, &keys, &iv, 256);
+        por_encode_simple_internal(&mut encryption, &keys, &iv, aes_iterations);
         assert_eq!(correct_encryption, encryption.to_vec());
 
         let mut encryptions = [input; 4];
-        por_encode_pipelined_internal(&mut encryptions, &keys, [&iv; 4], 256);
+        por_encode_pipelined_internal(&mut encryptions, &keys, [&iv; 4], aes_iterations);
 
         for encryption in encryptions.iter() {
             assert_eq!(correct_encryption, encryption.to_vec());

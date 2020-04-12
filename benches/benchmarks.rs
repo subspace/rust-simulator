@@ -81,12 +81,43 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let mut group = c.benchmark_group("CPU benchmark");
         group.sample_size(200);
 
-        let rounds = 256;
-        group.bench_function("PoR-128-encode-simple", |b| {
+        let aes_iterations = 256;
+        let breadth_iterations = 10;
+
+        group.bench_function("PoR-128-encode-simple-internal", |b| {
             b.iter(|| {
                 let mut piece = piece;
                 black_box(crypto::por_encode_simple_internal(
-                    &mut piece, &keys, &iv, rounds,
+                    &mut piece,
+                    &keys,
+                    &iv,
+                    aes_iterations,
+                ))
+            })
+        });
+
+        group.bench_function("PoR-128-encode-pipelined-internal", |b| {
+            let mut pieces = [piece; 4];
+            let ivs = [&iv; 4];
+            b.iter(|| {
+                black_box(crypto::por_encode_pipelined_internal(
+                    &mut pieces,
+                    &keys,
+                    ivs,
+                    aes_iterations,
+                ))
+            })
+        });
+
+        group.bench_function("PoR-128-encode-simple", |b| {
+            b.iter(|| {
+                let mut piece = piece;
+                black_box(crypto::por_encode_simple(
+                    &mut piece,
+                    &keys,
+                    &iv,
+                    aes_iterations,
+                    breadth_iterations,
                 ))
             })
         });
@@ -95,11 +126,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let mut pieces = [piece; 4];
             let ivs = [&iv; 4];
             b.iter(|| {
-                black_box(crypto::por_encode_pipelined_internal(
+                black_box(crypto::por_encode_pipelined(
                     &mut pieces,
                     &keys,
                     ivs,
-                    rounds,
+                    aes_iterations,
+                    breadth_iterations,
                 ))
             })
         });
