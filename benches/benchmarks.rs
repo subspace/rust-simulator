@@ -79,10 +79,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let iv = crypto::random_bytes_16();
 
         let mut group = c.benchmark_group("CPU benchmark");
-        group.sample_size(200);
+        group.sample_size(100);
 
         let aes_iterations = 256;
-        let breadth_iterations = 10;
+        let breadth_iterations = 16;
 
         group.bench_function("PoR-128-encode-simple-internal", |b| {
             b.iter(|| {
