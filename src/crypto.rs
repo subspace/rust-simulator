@@ -8,6 +8,7 @@ use crate::aes_soft;
 use crate::rijndael_hacks::Cipher;
 use crate::utils;
 use crate::Piece;
+use crate::BLOCK_SIZE;
 use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 use aes::Aes256;
@@ -54,7 +55,7 @@ pub fn random_bytes_32() -> [u8; 32] {
 
 /// Generate a vec of random bytes of any length
 pub fn random_bytes(size: usize) -> Vec<u8> {
-    let mut vec = Vec::with_capacity(size);
+    let mut vec = vec![0u8; size];
     rand::thread_rng().fill(&mut vec[..]);
     vec
 }
@@ -489,7 +490,7 @@ pub fn por_decode_pipelined_internal(
             let mut blocks_reg = unsafe { aes128_load4!(block0, block1, block2, block3) };
             let feedbacks_reg = unsafe { aes128_load4!(previous_feedback, block0, block1, block2) };
 
-            aes_low_level::por_decode_pipelined_low_level(
+            aes_low_level::por_decode_pipelined_x4_low_level(
                 keys_reg,
                 &mut blocks_reg,
                 feedbacks_reg,
@@ -515,6 +516,121 @@ pub fn por_decode_pipelined(
     for _ in 0..breadth_iterations {
         por_decode_pipelined_internal(piece, keys, iv, aes_iterations);
     }
+}
+
+/// Arbitrary length proof-of-time
+pub fn prove(
+    seed: &[u8; BLOCK_SIZE],
+    keys: &[[u8; BLOCK_SIZE]; 11],
+    aes_iterations: usize,
+    verifier_parallelism: usize,
+) -> Vec<u8> {
+    assert_eq!(aes_iterations % verifier_parallelism, 0);
+
+    let inner_iterations = aes_iterations / verifier_parallelism;
+
+    let mut result = Vec::<u8>::with_capacity(verifier_parallelism * BLOCK_SIZE);
+    let mut block = *seed;
+
+    for _ in 0..verifier_parallelism {
+        block = unsafe {
+            aes_benchmarks::encode_aes_ni_128(
+                &keys,
+                block[..].try_into().unwrap(),
+                inner_iterations,
+            )
+        };
+        result.extend_from_slice(&block);
+    }
+
+    result
+}
+
+/// Arbitrary length proof-of-time verification using pipelined AES-NI (proof must be a multiple of
+/// 4 blocks)
+pub fn verify_pipelined(
+    proof: &[u8],
+    seed: &[u8; BLOCK_SIZE],
+    keys: &[[u8; BLOCK_SIZE]; 11],
+    aes_iterations: usize,
+    verifier_parallelism: usize,
+) -> bool {
+    let pipelining_parallelism = 4;
+
+    assert_eq!(proof.len(), verifier_parallelism * BLOCK_SIZE);
+    assert_eq!(verifier_parallelism % pipelining_parallelism, 0);
+    assert_eq!(aes_iterations % verifier_parallelism, 0);
+
+    let keys_reg = unsafe { aes128_load_keys!(keys) };
+    let inner_iterations = aes_iterations / verifier_parallelism;
+
+    let mut previous = seed.as_ref();
+
+    proof
+        .chunks_exact(BLOCK_SIZE * pipelining_parallelism)
+        .map(|blocks| -> bool {
+            let (block0, blocks) = blocks.split_at(BLOCK_SIZE);
+            let (block1, blocks) = blocks.split_at(BLOCK_SIZE);
+            let (block2, block3) = blocks.split_at(BLOCK_SIZE);
+
+            let expected_reg = unsafe { aes128_load4!(previous, block0, block1, block2) };
+            let blocks_reg = unsafe { aes128_load4!(block0, block1, block2, block3) };
+            previous = block3;
+
+            aes_low_level::verify_pipelined_x4(keys_reg, expected_reg, blocks_reg, inner_iterations)
+        })
+        .fold(true, |a, b| a && b)
+}
+
+/// Arbitrary length proof-of-time verification using pipelined AES-NI (proof must be a multiple of
+/// 4 blocks)
+pub fn verify_pipelined_parallel(
+    proof: &[u8],
+    seed: &[u8; BLOCK_SIZE],
+    keys: &[[u8; BLOCK_SIZE]; 11],
+    aes_iterations: usize,
+) -> bool {
+    let pipelining_parallelism = 4;
+
+    assert_eq!(proof.len() % BLOCK_SIZE, 0);
+    let verifier_parallelism = proof.len() / BLOCK_SIZE;
+    assert_eq!(verifier_parallelism % pipelining_parallelism, 0);
+    assert_eq!(aes_iterations % verifier_parallelism, 0);
+
+    let keys_reg = unsafe { aes128_load_keys!(keys) };
+    let inner_iterations = aes_iterations / verifier_parallelism;
+
+    // Seeds iterator
+    [seed.as_ref()]
+        .iter()
+        .map(|seed| -> &[u8] { seed })
+        .chain(
+            proof
+                .chunks_exact(BLOCK_SIZE)
+                .skip(pipelining_parallelism - 1)
+                .step_by(pipelining_parallelism),
+        )
+        // Seeds with blocks iterator
+        .zip(proof.chunks_exact(pipelining_parallelism * BLOCK_SIZE))
+        .par_bridge()
+        .map(|(seed, blocks)| {
+            let (block0, blocks) = blocks.split_at(BLOCK_SIZE);
+            let (block1, blocks) = blocks.split_at(BLOCK_SIZE);
+            let (block2, block3) = blocks.split_at(BLOCK_SIZE);
+
+            let expected_reg = unsafe { aes128_load4!(seed, block0, block1, block2) };
+            let blocks_reg = unsafe { aes128_load4!(block0, block1, block2, block3) };
+
+            let result = aes_low_level::verify_pipelined_x4(
+                keys_reg,
+                expected_reg,
+                blocks_reg,
+                inner_iterations,
+            );
+
+            result
+        })
+        .reduce(|| true, |a, b| a && b)
 }
 
 /// Encodes one block at a time for a single piece on a GPU
@@ -1492,5 +1608,50 @@ mod tests {
         por_decode_pipelined_internal(&mut decoding, &keys, &iv, aes_iterations);
 
         assert_eq!(decoding.to_vec(), input.to_vec());
+    }
+
+    #[test]
+    fn test_proof_of_time() {
+        // Proof of time
+        let seed = crypto::random_bytes_16();
+        let id = crypto::random_bytes_16();
+        let aes_iterations = 256;
+        let verifier_parallelism = 16;
+        let keys = expand_keys_aes_128_enc(&id);
+
+        let proof = prove(&seed, &keys, aes_iterations, verifier_parallelism);
+        assert_eq!(proof.len(), verifier_parallelism * BLOCK_SIZE);
+
+        let keys = expand_keys_aes_128_dec(&id);
+
+        assert!(verify_pipelined(
+            &proof,
+            &seed,
+            &keys,
+            aes_iterations,
+            verifier_parallelism
+        ));
+
+        assert!(!verify_pipelined(
+            &random_bytes(verifier_parallelism * BLOCK_SIZE),
+            &seed,
+            &keys,
+            aes_iterations,
+            verifier_parallelism
+        ));
+
+        assert!(verify_pipelined_parallel(
+            &proof,
+            &seed,
+            &keys,
+            aes_iterations
+        ));
+
+        assert!(!verify_pipelined_parallel(
+            &random_bytes(verifier_parallelism * BLOCK_SIZE),
+            &seed,
+            &keys,
+            aes_iterations
+        ));
     }
 }
