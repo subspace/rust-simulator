@@ -553,11 +553,11 @@ pub fn verify_pipelined(
     seed: &[u8; BLOCK_SIZE],
     keys: &[[u8; BLOCK_SIZE]; 11],
     aes_iterations: usize,
-    verifier_parallelism: usize,
 ) -> bool {
     let pipelining_parallelism = 4;
 
-    assert_eq!(proof.len(), verifier_parallelism * BLOCK_SIZE);
+    assert_eq!(proof.len() % BLOCK_SIZE, 0);
+    let verifier_parallelism = proof.len() / BLOCK_SIZE;
     assert_eq!(verifier_parallelism % pipelining_parallelism, 0);
     assert_eq!(aes_iterations % verifier_parallelism, 0);
 
@@ -1576,18 +1576,16 @@ pub fn decode_eight_blocks_in_parallel(pieces: &[Piece], id: &[u8], offset: usiz
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::aes_soft;
-    use crate::crypto;
 
     #[test]
     fn test_por_encode_single_block() {
         // PoR
         let index = 13;
         let iv = utils::usize_to_bytes(index);
-        let id = crypto::random_bytes_16();
-        let input = crypto::random_bytes_4096();
+        let id = random_bytes_16();
+        let input = random_bytes_4096();
         let aes_iterations = 256;
-        let correct_encoding = crypto::por_encode_single_block_software(&input, &id, index);
+        let correct_encoding = por_encode_single_block_software(&input, &id, index);
 
         let keys = expand_keys_aes_128_enc(&id);
 
@@ -1613,8 +1611,8 @@ mod tests {
     #[test]
     fn test_proof_of_time() {
         // Proof of time
-        let seed = crypto::random_bytes_16();
-        let id = crypto::random_bytes_16();
+        let seed = random_bytes_16();
+        let id = random_bytes_16();
         let aes_iterations = 256;
         let verifier_parallelism = 16;
         let keys = expand_keys_aes_128_enc(&id);
@@ -1624,20 +1622,13 @@ mod tests {
 
         let keys = expand_keys_aes_128_dec(&id);
 
-        assert!(verify_pipelined(
-            &proof,
-            &seed,
-            &keys,
-            aes_iterations,
-            verifier_parallelism
-        ));
+        assert!(verify_pipelined(&proof, &seed, &keys, aes_iterations));
 
         assert!(!verify_pipelined(
             &random_bytes(verifier_parallelism * BLOCK_SIZE),
             &seed,
             &keys,
-            aes_iterations,
-            verifier_parallelism
+            aes_iterations
         ));
 
         assert!(verify_pipelined_parallel(
