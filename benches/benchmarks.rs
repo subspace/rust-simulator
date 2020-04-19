@@ -56,25 +56,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.finish();
     }
     {
-        let id = crypto::random_bytes_32();
-        let keys = {
-            let mut keys = [0u32; 44];
-            aes_soft::setkey_enc_k128(&id, &mut keys);
-
-            let flat_keys = keys
-                .iter()
-                .flat_map(|n| n.to_be_bytes().to_vec())
-                .collect::<Vec<u8>>();
-
-            let mut keys = [[0u8; 16]; 11];
-            keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
-                keys_group.iter_mut().enumerate().for_each(|(index, key)| {
-                    *key = *flat_keys.get(group * 16 + index).unwrap();
-                });
-            });
-
-            keys
-        };
+        let id = crypto::random_bytes_16();
+        let keys = expand_keys_aes_128_enc(&id);
         let piece = crypto::random_bytes_4096();
         let iv = crypto::random_bytes_16();
 

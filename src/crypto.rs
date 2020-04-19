@@ -138,6 +138,47 @@ pub fn validate_merkle_proof(index: usize, proof: &[u8], root: &[u8]) -> bool {
     Tree::check_proof(&root, &proof, &target_item, digest_sha_256_simple)
 }
 
+/// Expands 128-bit key into 11 round keys for AES-128 encryption
+pub fn expand_keys_aes_128_enc(key: &[u8; 16]) -> [[u8; 16]; 11] {
+    // TODO: This function is not efficient by any means
+    let mut keys = [0u32; 44];
+    aes_soft::setkey_enc_k128(key, &mut keys);
+
+    let flat_keys = keys
+        .iter()
+        .flat_map(|n| n.to_be_bytes().to_vec())
+        .collect::<Vec<u8>>();
+
+    let mut keys = [[0u8; 16]; 11];
+    keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
+        keys_group.iter_mut().enumerate().for_each(|(index, key)| {
+            *key = *flat_keys.get(group * 16 + index).unwrap();
+        });
+    });
+
+    keys
+}
+
+/// Expands 128-bit key into 11 round keys for AES-128 decryption
+pub fn expand_keys_aes_128_dec(key: &[u8; 16]) -> [[u8; 16]; 11] {
+    let mut keys = [0u32; 44];
+    aes_soft::setkey_dec_k128(key, &mut keys);
+
+    let flat_keys = keys
+        .iter()
+        .flat_map(|n| n.to_be_bytes().to_vec())
+        .collect::<Vec<u8>>();
+
+    let mut keys = [[0u8; 16]; 11];
+    keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
+        keys_group.iter_mut().enumerate().for_each(|(index, key)| {
+            *key = *flat_keys.get(group * 16 + index).unwrap();
+        });
+    });
+
+    keys
+}
+
 pub fn encode(piece: &Piece, index: u32, id: &[u8]) -> Vec<u8> {
     let mut iv = [0u8; 16];
     iv.as_mut().write_u32::<BigEndian>(index).unwrap();
@@ -1427,29 +1468,12 @@ mod tests {
         // PoR
         let index = 13;
         let iv = utils::usize_to_bytes(index);
-        let id = crypto::random_bytes_32();
+        let id = crypto::random_bytes_16();
         let input = crypto::random_bytes_4096();
         let aes_iterations = 256;
         let correct_encoding = crypto::por_encode_single_block_software(&input, &id, index);
 
-        let keys = {
-            let mut keys = [0u32; 44];
-            aes_soft::setkey_enc_k128(&id, &mut keys);
-
-            let flat_keys = keys
-                .iter()
-                .flat_map(|n| n.to_be_bytes().to_vec())
-                .collect::<Vec<u8>>();
-
-            let mut keys = [[0u8; 16]; 11];
-            keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
-                keys_group.iter_mut().enumerate().for_each(|(index, key)| {
-                    *key = *flat_keys.get(group * 16 + index).unwrap();
-                });
-            });
-
-            keys
-        };
+        let keys = expand_keys_aes_128_enc(&id);
 
         let mut encoding = input;
         por_encode_simple_internal(&mut encoding, &keys, &iv, aes_iterations);
@@ -1462,24 +1486,7 @@ mod tests {
             assert_eq!(encoding.to_vec(), correct_encoding.to_vec());
         }
 
-        let keys = {
-            let mut keys = [0u32; 44];
-            aes_soft::setkey_dec_k128(&id, &mut keys);
-
-            let flat_keys = keys
-                .iter()
-                .flat_map(|n| n.to_be_bytes().to_vec())
-                .collect::<Vec<u8>>();
-
-            let mut keys = [[0u8; 16]; 11];
-            keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
-                keys_group.iter_mut().enumerate().for_each(|(index, key)| {
-                    *key = *flat_keys.get(group * 16 + index).unwrap();
-                });
-            });
-
-            keys
-        };
+        let keys = expand_keys_aes_128_dec(&id);
 
         let mut decoding = correct_encoding;
         por_decode_pipelined_internal(&mut decoding, &keys, &iv, aes_iterations);
