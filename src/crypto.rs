@@ -1,4 +1,5 @@
 mod aes_low_level;
+pub mod memory_bound;
 
 use crate::aes128_load4;
 use crate::aes128_load_keys;
