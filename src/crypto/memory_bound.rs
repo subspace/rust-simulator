@@ -94,10 +94,15 @@ pub fn por_encode_simple_parallel(
     iv: Block,
     breadth_iterations: usize,
     sbox: &SBoxDirect,
+    thread_pipelining: usize,
 ) {
-    pieces.par_iter_mut().for_each(|piece: &mut Piece| {
-        por_encode_simple(piece, iv, breadth_iterations, &sbox);
-    });
+    pieces
+        .par_chunks_mut(thread_pipelining)
+        .for_each(|pieces: &mut [Piece]| {
+            for piece in pieces {
+                por_encode_simple(piece, iv, breadth_iterations, &sbox);
+            }
+        });
 }
 
 pub fn por_decode_simple(
@@ -125,10 +130,15 @@ pub fn por_decode_simple_parallel(
     iv: Block,
     breadth_iterations: usize,
     sbox: &SBoxInverse,
+    thread_pipelining: usize,
 ) {
-    pieces.par_iter_mut().for_each(|piece: &mut Piece| {
-        por_decode_simple(piece, iv, breadth_iterations, &sbox);
-    });
+    pieces
+        .par_chunks_mut(thread_pipelining)
+        .for_each(|pieces: &mut [Piece]| {
+            for piece in pieces {
+                por_decode_simple(piece, iv, breadth_iterations, &sbox);
+            }
+        });
 }
 
 #[cfg(test)]
@@ -157,7 +167,7 @@ mod tests {
         for &iterations in &[1, 10] {
             let inputs = vec![input; 3];
             let mut encodings = inputs.clone();
-            por_encode_simple_parallel(&mut encodings, iv, iterations, &sbox);
+            por_encode_simple_parallel(&mut encodings, iv, iterations, &sbox, 1);
 
             assert_ne!(
                 encodings
@@ -170,7 +180,7 @@ mod tests {
                     .collect::<Vec<_>>()
             );
 
-            por_decode_simple_parallel(&mut encodings, iv, iterations, &sbox_inverse);
+            por_decode_simple_parallel(&mut encodings, iv, iterations, &sbox_inverse, 1);
 
             assert_eq!(
                 encodings
