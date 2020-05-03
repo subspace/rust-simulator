@@ -1,4 +1,5 @@
 use crate::Piece;
+use rayon::prelude::*;
 use std::io::Write;
 
 const BLOCK_SIZE_BITS: u32 = 24;
@@ -88,6 +89,17 @@ pub fn por_encode_simple(
     }
 }
 
+pub fn por_encode_simple_parallel(
+    pieces: &mut [Piece],
+    iv: Block,
+    breadth_iterations: usize,
+    sbox: &SBoxDirect,
+) {
+    pieces.par_iter_mut().for_each(|piece: &mut Piece| {
+        por_encode_simple(piece, iv, breadth_iterations, &sbox);
+    });
+}
+
 pub fn por_decode_simple(
     piece: &mut Piece,
     iv: Block,
@@ -106,6 +118,17 @@ pub fn por_decode_simple(
             block[2] = decoded[2] ^ previous_feedback[2];
         });
     }
+}
+
+pub fn por_decode_simple_parallel(
+    pieces: &mut [Piece],
+    iv: Block,
+    breadth_iterations: usize,
+    sbox: &SBoxInverse,
+) {
+    pieces.par_iter_mut().for_each(|piece: &mut Piece| {
+        por_decode_simple(piece, iv, breadth_iterations, &sbox);
+    });
 }
 
 #[cfg(test)]
@@ -129,6 +152,36 @@ mod tests {
             por_decode_simple(&mut encoding, iv, iterations, &sbox_inverse);
 
             assert_eq!(encoding[..], input[..]);
+        }
+
+        for &iterations in &[1, 10] {
+            let inputs = vec![input; 3];
+            let mut encodings = inputs.clone();
+            por_encode_simple_parallel(&mut encodings, iv, iterations, &sbox);
+
+            assert_ne!(
+                encodings
+                    .iter()
+                    .map(|array| array.to_vec())
+                    .collect::<Vec<_>>(),
+                inputs
+                    .iter()
+                    .map(|array| array.to_vec())
+                    .collect::<Vec<_>>()
+            );
+
+            por_decode_simple_parallel(&mut encodings, iv, iterations, &sbox_inverse);
+
+            assert_eq!(
+                encodings
+                    .iter()
+                    .map(|array| array.to_vec())
+                    .collect::<Vec<_>>(),
+                inputs
+                    .iter()
+                    .map(|array| array.to_vec())
+                    .collect::<Vec<_>>()
+            );
         }
     }
 }
