@@ -84,6 +84,27 @@ macro_rules! aes128_load_keys {
     };
 }
 
+#[macro_export]
+macro_rules! compare_eq4 {
+    ($what:expr, $with:expr) => {{
+        let mut value = [0u128];
+        _mm_storeu_si128(
+            value.as_mut_ptr() as *mut __m128i,
+            _mm_and_si128(
+                _mm_and_si128(
+                    _mm_cmpeq_epi64($what[0], $with[0]),
+                    _mm_cmpeq_epi64($what[1], $with[1]),
+                ),
+                _mm_and_si128(
+                    _mm_cmpeq_epi64($what[2], $with[2]),
+                    _mm_cmpeq_epi64($what[3], $with[3]),
+                ),
+            ),
+        );
+        value == [u128::max_value()]
+    }};
+}
+
 pub fn decode_aes_ni_128_pipelined_x4(
     keys: &[[u8; 16]; 11],
     blocks: [&mut [u8; 16]; 4],
@@ -118,7 +139,7 @@ pub fn decode_aes_ni_128_pipelined_x4(
     }
 }
 
-pub fn por_decode_pipelined_low_level(
+pub fn por_decode_pipelined_x4_low_level(
     keys_reg: [__m128i; 11],
     blocks_reg: &mut [__m128i; 4],
     feedbacks_reg: [__m128i; 4],
@@ -142,5 +163,32 @@ pub fn por_decode_pipelined_low_level(
         }
 
         aes128_xor4x4!(blocks_reg, feedbacks_reg);
+    }
+}
+
+pub fn verify_pipelined_x4(
+    keys_reg: [__m128i; 11],
+    expected_reg: [__m128i; 4],
+    mut blocks_reg: [__m128i; 4],
+    aes_iterations: usize,
+) -> bool {
+    unsafe {
+        for _ in 0..aes_iterations {
+            aes128_xor4!(blocks_reg, keys_reg[10]);
+
+            aes128_decode4!(blocks_reg, keys_reg[9]);
+            aes128_decode4!(blocks_reg, keys_reg[8]);
+            aes128_decode4!(blocks_reg, keys_reg[7]);
+            aes128_decode4!(blocks_reg, keys_reg[6]);
+            aes128_decode4!(blocks_reg, keys_reg[5]);
+            aes128_decode4!(blocks_reg, keys_reg[4]);
+            aes128_decode4!(blocks_reg, keys_reg[3]);
+            aes128_decode4!(blocks_reg, keys_reg[2]);
+            aes128_decode4!(blocks_reg, keys_reg[1]);
+
+            aes128_decode4_last!(blocks_reg, keys_reg[0]);
+        }
+
+        compare_eq4!(expected_reg, blocks_reg)
     }
 }

@@ -199,9 +199,7 @@ pub async fn run(
                             }
                         }
                     }
-                    _ => {
-                        panic!("Main protocol listener has received an unknown protocol message!")
-                    }
+                    _ => panic!("Main protocol listener has received an unknown protocol message!"),
                 }
             }
         }

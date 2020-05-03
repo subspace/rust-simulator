@@ -16,7 +16,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let piece = crypto::random_bytes_4096();
         let iv = vec![13u128];
 
-        let mut group = c.benchmark_group("GPU benchmark");
+        let mut group = c.benchmark_group("GPU");
         group.sample_size(10);
 
         group.bench_function("PoR-128-encode-single", |b| {
@@ -56,29 +56,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         group.finish();
     }
     {
-        let id = crypto::random_bytes_32();
-        let keys = {
-            let mut keys = [0u32; 44];
-            aes_soft::setkey_enc_k128(&id, &mut keys);
-
-            let flat_keys = keys
-                .iter()
-                .flat_map(|n| n.to_be_bytes().to_vec())
-                .collect::<Vec<u8>>();
-
-            let mut keys = [[0u8; 16]; 11];
-            keys.iter_mut().enumerate().for_each(|(group, keys_group)| {
-                keys_group.iter_mut().enumerate().for_each(|(index, key)| {
-                    *key = *flat_keys.get(group * 16 + index).unwrap();
-                });
-            });
-
-            keys
-        };
+        let id = crypto::random_bytes_16();
+        let keys = crypto::expand_keys_aes_128_enc(&id);
         let piece = crypto::random_bytes_4096();
         let iv = crypto::random_bytes_16();
 
-        let mut group = c.benchmark_group("CPU benchmark");
+        let mut group = c.benchmark_group("CPU");
         group.sample_size(100);
 
         let aes_iterations = 256;
@@ -162,6 +145,81 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 ))
             })
         });
+
+        group.finish();
+    }
+    {
+        let seed = crypto::random_bytes_16();
+        let id = crypto::random_bytes_16();
+        let base_aes_iterations = 3_000_000;
+        let prove_keys = crypto::expand_keys_aes_128_enc(&id);
+
+        let mut group = c.benchmark_group("Proof-of-time");
+        group.sample_size(10);
+
+        let benchmark_parameters = [1usize, 10, 100]
+            .iter()
+            .map(|&n| n * base_aes_iterations)
+            .flat_map(|aes_iterations| {
+                [4, 16, 64]
+                    .iter()
+                    .map(move |&verifier_parallelism| (aes_iterations, verifier_parallelism))
+            });
+        for (aes_iterations, verifier_parallelism) in benchmark_parameters {
+            group.bench_function(
+                format!(
+                    "Prove-{}-iterations-{}-parallelism",
+                    aes_iterations, verifier_parallelism
+                ),
+                |b| {
+                    b.iter(|| {
+                        black_box(crypto::prove(
+                            &seed,
+                            &prove_keys,
+                            aes_iterations,
+                            verifier_parallelism,
+                        ))
+                    })
+                },
+            );
+
+            let proof = crypto::prove(&seed, &prove_keys, aes_iterations, verifier_parallelism);
+            let verify_keys = crypto::expand_keys_aes_128_dec(&id);
+
+            group.bench_function(
+                format!(
+                    "Verify-pipelined-{}-iterations-{}-parallelism",
+                    aes_iterations, verifier_parallelism
+                ),
+                |b| {
+                    b.iter(|| {
+                        black_box(crypto::verify_pipelined(
+                            &proof,
+                            &seed,
+                            &verify_keys,
+                            aes_iterations,
+                        ))
+                    })
+                },
+            );
+
+            group.bench_function(
+                format!(
+                    "Verify-pipelined-parallel-{}-iterations-{}-parallelism",
+                    aes_iterations, verifier_parallelism
+                ),
+                |b| {
+                    b.iter(|| {
+                        black_box(crypto::verify_pipelined_parallel(
+                            &proof,
+                            &seed,
+                            &verify_keys,
+                            aes_iterations,
+                        ))
+                    })
+                },
+            );
+        }
 
         group.finish();
     }
