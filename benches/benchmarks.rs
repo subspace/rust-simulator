@@ -223,6 +223,42 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         group.finish();
     }
+    {
+        use crypto::memory_bound;
+
+        let piece = crypto::random_bytes_4096();
+        let iv = [1, 2, 3];
+        let sbox = memory_bound::SBoxDirect::new();
+        let sbox_inverse = memory_bound::SBoxInverse::new();
+
+        let mut group = c.benchmark_group("Memory-bound");
+        group.sample_size(100);
+
+        for &iterations in &[1usize, 10, 100] {
+            group.bench_function(format!("Prove-{}-iterations", iterations), |b| {
+                b.iter(|| {
+                    let mut piece = piece;
+                    black_box(memory_bound::por_encode_simple(
+                        &mut piece, iv, iterations, &sbox,
+                    ))
+                })
+            });
+
+            group.bench_function(format!("Verify-{}-iterations", iterations), |b| {
+                b.iter(|| {
+                    let mut piece = piece;
+                    black_box(memory_bound::por_decode_simple(
+                        &mut piece,
+                        iv,
+                        iterations,
+                        &sbox_inverse,
+                    ))
+                })
+            });
+        }
+
+        group.finish();
+    }
 }
 
 criterion_group!(benches, criterion_benchmark);
