@@ -9,7 +9,6 @@ mod ledger;
 mod manager;
 mod network;
 mod plotter;
-mod rijndael_hacks;
 mod solver;
 mod utils;
 
@@ -55,8 +54,6 @@ use std::time::Duration;
 
 #[cfg(target_arch = "x86")]
 use core::arch::x86 as arch;
-#[cfg(target_arch = "x86_64")]
-use core::arch::x86_64 as arch;
 
 pub const PIECE_SIZE: usize = 4096;
 pub const ID_SIZE: usize = 32;
