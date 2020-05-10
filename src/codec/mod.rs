@@ -329,6 +329,8 @@ mod tests {
 
     #[test]
     fn test() {
+        let mut codec = Codec::new().unwrap();
+
         // PoR
         let iv = vec![13u128];
         let id = crypto::random_bytes_32();
