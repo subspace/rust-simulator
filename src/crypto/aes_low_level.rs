@@ -105,40 +105,6 @@ macro_rules! compare_eq4 {
     }};
 }
 
-pub fn decode_aes_ni_128_pipelined_x4(
-    keys: &[[u8; 16]; 11],
-    blocks: [&mut [u8; 16]; 4],
-    feedbacks: &[[u8; 16]; 4],
-    rounds: usize,
-) {
-    unsafe {
-        let mut blocks_reg = aes128_load4!(blocks);
-        let feedbacks_reg = aes128_load4!(feedbacks);
-
-        let keys_reg = aes128_load_keys!(keys);
-
-        for _ in 0..rounds {
-            aes128_xor4!(blocks_reg, keys_reg[10]);
-
-            aes128_decode4!(blocks_reg, keys_reg[9]);
-            aes128_decode4!(blocks_reg, keys_reg[8]);
-            aes128_decode4!(blocks_reg, keys_reg[7]);
-            aes128_decode4!(blocks_reg, keys_reg[6]);
-            aes128_decode4!(blocks_reg, keys_reg[5]);
-            aes128_decode4!(blocks_reg, keys_reg[4]);
-            aes128_decode4!(blocks_reg, keys_reg[3]);
-            aes128_decode4!(blocks_reg, keys_reg[2]);
-            aes128_decode4!(blocks_reg, keys_reg[1]);
-
-            aes128_decode4_last!(blocks_reg, keys_reg[0]);
-        }
-
-        aes128_xor4x4!(blocks_reg, feedbacks_reg);
-
-        aes128_store4!(blocks, blocks_reg);
-    }
-}
-
 pub fn por_decode_pipelined_x4_low_level(
     keys_reg: [__m128i; 11],
     blocks_reg: &mut [__m128i; 4],
@@ -163,32 +129,5 @@ pub fn por_decode_pipelined_x4_low_level(
         }
 
         aes128_xor4x4!(blocks_reg, feedbacks_reg);
-    }
-}
-
-pub fn verify_pipelined_x4(
-    keys_reg: [__m128i; 11],
-    expected_reg: [__m128i; 4],
-    mut blocks_reg: [__m128i; 4],
-    aes_iterations: usize,
-) -> bool {
-    unsafe {
-        for _ in 0..aes_iterations {
-            aes128_xor4!(blocks_reg, keys_reg[10]);
-
-            aes128_decode4!(blocks_reg, keys_reg[9]);
-            aes128_decode4!(blocks_reg, keys_reg[8]);
-            aes128_decode4!(blocks_reg, keys_reg[7]);
-            aes128_decode4!(blocks_reg, keys_reg[6]);
-            aes128_decode4!(blocks_reg, keys_reg[5]);
-            aes128_decode4!(blocks_reg, keys_reg[4]);
-            aes128_decode4!(blocks_reg, keys_reg[3]);
-            aes128_decode4!(blocks_reg, keys_reg[2]);
-            aes128_decode4!(blocks_reg, keys_reg[1]);
-
-            aes128_decode4_last!(blocks_reg, keys_reg[0]);
-        }
-
-        compare_eq4!(expected_reg, blocks_reg)
     }
 }
