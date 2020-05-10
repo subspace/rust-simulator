@@ -1,5 +1,4 @@
 pub mod aes_soft;
-pub mod codec;
 pub mod crypto;
 pub mod utils;
 

@@ -2,7 +2,6 @@
 
 mod aes_soft;
 mod benchmarks;
-mod codec;
 mod crypto;
 mod ledger;
 mod manager;
