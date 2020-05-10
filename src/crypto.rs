@@ -1,4 +1,3 @@
-mod aes_low_level;
 pub mod memory_bound;
 
 use crate::aes_soft;
