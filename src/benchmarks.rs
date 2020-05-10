@@ -39,13 +39,6 @@ pub fn run() {
         test_encoding_speed_single_block_software,
     );
 
-    test_encode_speed(
-        &pieces,
-        &key,
-        "single block, OpenCL",
-        test_encoding_speed_single_block_open_cl,
-    );
-
     test_decode_speed(
         &encodings,
         &key,
@@ -58,13 +51,6 @@ pub fn run() {
         &key,
         "single block, software",
         test_decoding_speed_single_block_software,
-    );
-
-    test_decode_speed(
-        &encodings,
-        &key,
-        "single block, OpenCL",
-        test_decoding_speed_single_block_open_cl,
     );
 
     test_decode_speed(
@@ -168,17 +154,6 @@ fn test_encoding_speed_single_block_software(pieces: &[Piece], key: &[u8]) -> Ve
     encode_times
 }
 
-fn test_encoding_speed_single_block_open_cl(pieces: &[Piece], key: &[u8]) -> Vec<u128> {
-    let mut encode_times: Vec<u128> = Vec::with_capacity(pieces.len());
-    for (i, piece) in pieces.iter().enumerate() {
-        let start_time = Instant::now();
-        crypto::encode_single_block_open_cl(piece, key, i);
-        let encode_time = start_time.elapsed().as_nanos();
-        encode_times.push(encode_time);
-    }
-    encode_times
-}
-
 // Generic decode speed test
 fn test_decode_speed(
     encodings: &[Piece],
@@ -216,17 +191,6 @@ fn test_decoding_speed_single_block_software(encodings: &[Piece], key: &[u8]) ->
     for (i, encoding) in encodings.iter().enumerate() {
         let start_time = Instant::now();
         crypto::decode_single_block_software(&encoding, &key, i);
-        let decode_time = start_time.elapsed().as_nanos();
-        decode_times.push(decode_time);
-    }
-    decode_times
-}
-
-fn test_decoding_speed_single_block_open_cl(encodings: &[Piece], key: &[u8]) -> Vec<u128> {
-    let mut decode_times: Vec<u128> = Vec::with_capacity(encodings.len());
-    for (i, encoding) in encodings.iter().enumerate() {
-        let start_time = Instant::now();
-        crypto::decode_single_block_open_cl(&encoding, &key, i);
         let decode_time = start_time.elapsed().as_nanos();
         decode_times.push(decode_time);
     }

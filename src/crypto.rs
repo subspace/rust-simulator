@@ -4,7 +4,6 @@ pub mod memory_bound;
 use crate::aes128_load4;
 use crate::aes128_load_keys;
 use crate::aes128_store4;
-use crate::aes_open_cl::Aes256OpenCL;
 use crate::aes_soft;
 use crate::utils;
 use crate::Piece;
@@ -623,58 +622,6 @@ pub fn verify_pipelined_parallel(
         .reduce(|| true, |a, b| a && b)
 }
 
-/// Encodes one block at a time for a single piece on a GPU
-pub fn encode_single_block_open_cl(piece: &Piece, id: &[u8], index: usize) -> Piece {
-    // setup the cipher
-    let iv = utils::usize_to_bytes(index);
-    let mut block: GenericArray<u8, U16> = GenericArray::clone_from_slice(&piece[0..BLOCK_SIZE]);
-    let mut encoding: Piece = [0u8; crate::PIECE_SIZE];
-    let mut keys = [0u32; 60];
-    aes_soft::setkey_enc_k256(&id, &mut keys);
-    let mut block_offset = 0;
-
-    // xor first block with IV
-    for i in 0..BLOCK_SIZE {
-        block[i] ^= iv[i];
-    }
-
-    let aes_256_open_cl = Aes256OpenCL::new().unwrap();
-
-    // apply Rijndael cipher for specified rounds
-    for _ in 0..crate::ROUNDS {
-        let res = aes_256_open_cl.encrypt(&block, &keys).unwrap();
-        block.copy_from_slice(&res);
-    }
-
-    // copy block into encoding
-    for i in 0..BLOCK_SIZE {
-        encoding[i] = block[i];
-    }
-
-    block_offset += BLOCK_SIZE;
-
-    for _ in 1..crate::BLOCKS_PER_PIECE {
-        // xor feedback with source block
-        for i in 0..BLOCK_SIZE {
-            block[i] ^= piece[i + block_offset];
-        }
-
-        // apply Rijndael cipher for specified rounds
-        for _ in 0..crate::ROUNDS {
-            let res = aes_256_open_cl.encrypt(&block, &keys).unwrap();
-            block.copy_from_slice(&res);
-        }
-
-        // copy block into encoding
-        for i in 0..BLOCK_SIZE {
-            encoding[i + block_offset] = block[i];
-        }
-
-        block_offset += BLOCK_SIZE;
-    }
-    encoding
-}
-
 /// Decodes one block at a time for a single piece on a single core
 pub fn decode_single_block(encoding: &Piece, id: &[u8], index: usize) -> Piece {
     // setup the cipher
@@ -818,61 +765,6 @@ pub fn por_decode_single_block_software(encoding: &Piece, id: &[u8], index: usiz
         for _ in 0..rounds {
             let mut res = [0u8; 16];
             aes_soft::block_dec_k128(&block, &mut res, &keys);
-            block.copy_from_slice(&res);
-        }
-
-        // xor with iv or previous encoded block to retrieve source block
-        let previous_block_offset = block_offset - BLOCK_SIZE;
-        for i in 0..BLOCK_SIZE {
-            block[i] ^= encoding[previous_block_offset + i];
-        }
-
-        // copy block into encoding
-        for i in 0..BLOCK_SIZE {
-            piece[i + block_offset] = block[i];
-        }
-
-        block_offset += BLOCK_SIZE;
-    }
-    piece
-}
-
-/// Decodes one block at a time for a single piece on a GPU
-pub fn decode_single_block_open_cl(encoding: &Piece, id: &[u8], index: usize) -> Piece {
-    // setup the cipher
-    let iv = utils::usize_to_bytes(index);
-    let mut piece: Piece = [0u8; crate::PIECE_SIZE];
-    let mut keys = [0u32; 60];
-    aes_soft::setkey_dec_k256(&id, &mut keys);
-    let mut block_offset = 0;
-
-    let mut block: GenericArray<u8, U16> = GenericArray::clone_from_slice(&encoding[0..BLOCK_SIZE]);
-
-    let aes_256_open_cl = Aes256OpenCL::new().unwrap();
-
-    // apply inverse Rijndael cipher to each encoded block
-    for _ in 0..crate::ROUNDS {
-        let res = aes_256_open_cl.decrypt(&block, &keys).unwrap();
-        block.copy_from_slice(&res);
-    }
-
-    for i in 0..BLOCK_SIZE {
-        block[i] ^= iv[i];
-    }
-
-    // copy block into encoding
-    for i in 0..BLOCK_SIZE {
-        piece[i] = block[i];
-    }
-
-    block_offset += BLOCK_SIZE;
-
-    for _ in 1..crate::BLOCKS_PER_PIECE {
-        block = GenericArray::clone_from_slice(&encoding[block_offset..block_offset + BLOCK_SIZE]);
-
-        // apply inverse Rijndael cipher to each encoded block
-        for _ in 0..crate::ROUNDS {
-            let res = aes_256_open_cl.decrypt(&block, &keys).unwrap();
             block.copy_from_slice(&res);
         }
 
